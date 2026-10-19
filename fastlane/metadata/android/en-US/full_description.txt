@@ -1,0 +1,37 @@
+<p>TidyDial gives every phone number in your contacts one clean, consistent format. You review every change before anything is written, and you can undo the last update.</p>
+
+<p><b>How it works</b></p>
+<ul>
+<li>Pick a format: International (+1 212-555-0199), National ((212) 555-0199), E.164 (+12125550199) or RFC 3966 (tel:+1-212-555-0199).</li>
+<li>Numbers without a country code are read as local to your country. TidyDial detects the country from your SIM, network or language settings, and you can change it at any time.</li>
+<li>Your numbers are grouped by contact, and each one shows its current and new form. Filter by changes, selection or invalid numbers, or search by name or number.</li>
+<li>Choose exactly which numbers to update, then confirm. Only the phone number field is changed. Names, photos and everything else stay as they are.</li>
+<li>Undo the last update, even after restarting the app.</li>
+</ul>
+
+<p><b>Careful by default</b></p>
+<ul>
+<li>Only numbers that can be recognized are rewritten. Anything else is flagged and left alone.</li>
+<li>Emergency numbers (112, 911), short service numbers and codes such as *#06# are never changed.</li>
+<li>Extensions after a pause or wait are kept.</li>
+<li>Numbers synced by messaging apps (WhatsApp, Telegram, Signal and others) are skipped by default, because those apps overwrite edits with their own copy. You can choose which accounts to include.</li>
+<li>A number that was changed somewhere else after TidyDial read it is skipped, not overwritten.</li>
+</ul>
+
+<p><b>Private and offline</b></p>
+<ul>
+<li>No internet permission. TidyDial cannot send your contacts anywhere.</li>
+<li>No ads, trackers, analytics or proprietary libraries.</li>
+<li>Phone numbers are parsed on your device with Google's open-source libphonenumber library.</li>
+</ul>
+
+<p><b>Permissions</b></p>
+<ul>
+<li>Read contacts: to list your phone numbers and show how they would be formatted.</li>
+<li>Write contacts: to save the numbers you choose to update, and to restore them when you undo.</li>
+</ul>
+<p>These are the only permissions TidyDial asks you for.</p>
+
+<p>Built with Jetpack Compose and Material 3 Expressive. It uses dynamic color (Material You) on Android 12 and later, and has a dark theme. Requires Android 8.0 or later.</p>
+
+<p>TidyDial is free and open-source software under the Apache License 2.0.</p>

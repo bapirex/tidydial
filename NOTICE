@@ -1,0 +1,38 @@
+TidyDial
+Copyright 2026 TidyDial Contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes or bundles the following third-party components, all
+licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0):
+
+- Android Jetpack / AndroidX libraries, including Jetpack Compose, Activity,
+  Lifecycle, Core and Core SplashScreen
+  Copyright The Android Open Source Project
+  https://developer.android.com/jetpack/androidx
+
+- Material 3 for Jetpack Compose (androidx.compose.material3)
+  Copyright The Android Open Source Project
+  https://developer.android.com/jetpack/androidx/releases/compose-material3
+
+- Jetpack DataStore (androidx.datastore)
+  Copyright The Android Open Source Project
+  https://developer.android.com/jetpack/androidx/releases/datastore
+
+- Material Symbols icons
+  Copyright Google LLC
+  https://github.com/google/material-design-icons
+  Taken from commit 49d4db35df873165d6bd6ba09b063c7dafbac2f4.
+  The in-app icons are Material Symbols Rounded vector drawables. The handset
+  glyph in the launcher icon and in docs/logo.svg is the Material Symbols
+  Rounded "call" symbol.
+
+- libphonenumber
+  Copyright Google LLC
+  https://github.com/google/libphonenumber
+
+- Kotlin standard library and kotlinx.coroutines
+  Copyright JetBrains s.r.o. and Kotlin Programming Language contributors
+  https://github.com/JetBrains/kotlin
+  https://github.com/Kotlin/kotlinx.coroutines

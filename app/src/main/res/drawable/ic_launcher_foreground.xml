@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Handset: Material Symbols Rounded "call" (fill 1), Apache-2.0,
+     https://github.com/google/material-design-icons/blob/master/symbols/web/call/materialsymbolsrounded/call_fill1_24px.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.04"
+        android:scaleY="0.04"
+        android:translateX="24.017"
+        android:translateY="73.333">
+        <path
+            android:fillColor="@color/ic_launcher_foreground_color"
+            android:pathData="M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-12h162q14 0 25 9.5t13 22.5l26 140q2 16-1 27t-11 19l-97 98q20 37 47.5 71.5T387-386q31 31 65 57.5t72 48.5l94-94q9-9 23.5-13.5T670-390l138 28q14 4 23 14.5t9 23.5v162q0 18-12 30t-30 12Z" />
+    </group>
+    <path
+        android:fillColor="@color/ic_launcher_foreground_color"
+        android:pathData="M63.475,41.875H78.525A2.625,2.625 0,0 1 78.525,47.125H63.475A2.625,2.625 0,0 1 63.475,41.875ZM63.475,51.375H72.725A2.625,2.625 0,0 1 72.725,56.625H63.475A2.625,2.625 0,0 1 63.475,51.375ZM63.475,60.875H66.925A2.625,2.625 0,0 1 66.925,66.125H63.475A2.625,2.625 0,0 1 63.475,60.875Z" />
+</vector>

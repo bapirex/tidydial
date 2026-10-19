@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">TidyDial</string>
+
+    <!-- Data layer -->
+    <!-- Shown when a contact has no display name. -->
+    <string name="unknown_contact_name">Unknown</string>
+    <!-- Account label for numbers stored only on this phone. -->
+    <string name="account_device">Device</string>
+    <!-- Account label for numbers stored on the SIM card. -->
+    <string name="account_sim">SIM card</string>
+
+    <!-- Shared -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="format_options">Format options</string>
+    <string name="error_load_contacts">Couldn’t read your contacts</string>
+    <string name="privacy_on_device">Your contacts never leave your device</string>
+    <!-- Joins two short parts, e.g. "312 numbers · 48 need formatting". -->
+    <string name="join_dot">%1$s · %2$s</string>
+    <plurals name="number_count">
+        <item quantity="one">%d number</item>
+        <item quantity="other">%d numbers</item>
+    </plurals>
+
+    <!-- ===== Permission explainer ===== -->
+    <!-- Small label above the headline. -->
+    <string name="permission_welcome">Welcome to TidyDial</string>
+    <string name="permission_headline">Tidy up your phone numbers</string>
+    <string name="permission_body">TidyDial finds the phone numbers in your contacts and rewrites them in one clean, consistent format.</string>
+
+    <!-- Before/after example card. The numbers are fake and must stay in the same format. -->
+    <string name="permission_example_type">Mobile</string>
+    <string name="permission_example_before" translatable="false">2125550199</string>
+    <string name="permission_example_after" translatable="false">+1 212-555-0199</string>
+    <!-- Spoken by screen readers for the example card. %1$s is the original number, %2$s the formatted one. -->
+    <string name="permission_example_description">Example: %1$s becomes %2$s</string>
+
+    <!-- Privacy promises. -->
+    <string name="permission_promise_offline">Works completely offline — no internet permission</string>
+    <string name="permission_promise_undo">Review every change, undo any time</string>
+
+    <!-- Actions. -->
+    <string name="permission_allow">Allow contacts access</string>
+    <string name="permission_open_settings">Open settings</string>
+    <!-- Shown under the button while the system dialog can still be shown. -->
+    <string name="permission_denied_hint">Next, Android will ask for access. Choose Allow.</string>
+    <!-- Shown when the system dialog will not appear again. -->
+    <string name="permission_permanently_denied">Contacts access was denied. Enable it in Settings &gt; Permissions.</string>
+    <string name="permission_footnote">TidyDial only reads and edits phone numbers.</string>
+
+    <!-- ===== Contacts list ===== -->
+    <plurals name="list_summary_need_formatting">
+        <item quantity="one">%d needs formatting</item>
+        <item quantity="other">%d need formatting</item>
+    </plurals>
+    <string name="list_summary_all_tidy">all tidy</string>
+    <string name="list_summary_loading">Reading your contacts…</string>
+
+    <string name="list_action_more">More options</string>
+    <string name="list_menu_refresh">Refresh</string>
+    <string name="list_menu_undo">Undo last update</string>
+    <string name="list_menu_about">About</string>
+
+    <!-- Search -->
+    <string name="list_search_placeholder">Search names or numbers</string>
+
+    <!-- Filter chips -->
+    <string name="list_filter_all">All</string>
+    <string name="list_filter_changes">Changes</string>
+    <string name="list_filter_selected">Selected</string>
+    <string name="list_filter_invalid">Invalid</string>
+
+    <!-- Contact card -->
+    <!-- %1$d selected numbers of %2$d that can be updated. -->
+    <plurals name="list_contact_selected_of">
+        <item quantity="one">%1$d of %2$d selected</item>
+        <item quantity="other">%1$d of %2$d selected</item>
+    </plurals>
+    <string name="list_contact_up_to_date">Up to date</string>
+    <plurals name="list_contact_invalid">
+        <item quantity="one">%d invalid</item>
+        <item quantity="other">%d invalid</item>
+    </plurals>
+    <!-- Avatar action for TalkBack; %1$s is the contact name. -->
+    <string name="list_avatar_select">Select all numbers of %1$s</string>
+    <string name="list_avatar_deselect">Clear numbers of %1$s</string>
+
+    <!-- Number row -->
+    <string name="list_number_invalid">Invalid number</string>
+    <!-- TalkBack: "Mobile, Google, 2125550199 will become +1 212-555-0199". -->
+    <string name="list_number_will_become">%1$s, %2$s, %3$s will become %4$s</string>
+    <string name="list_number_invalid_description">%1$s, %2$s, %3$s, invalid number</string>
+    <string name="list_number_formatted_description">%1$s, %2$s, %3$s, already formatted</string>
+
+    <!-- Empty states -->
+    <string name="list_empty_title">No phone numbers yet</string>
+    <string name="list_empty_body">Contacts with phone numbers show up here, ready to tidy.</string>
+    <string name="list_no_matches_title">No matches</string>
+    <string name="list_no_matches_body">Nothing matches “%1$s”. Try a name or part of a number.</string>
+    <string name="list_no_changes_title">Everything is tidy</string>
+    <string name="list_no_changes_body">All numbers in this view are already formatted.</string>
+    <string name="list_no_selection_title">Nothing selected</string>
+    <string name="list_no_selection_body">Tick the numbers you want to include in the next update.</string>
+    <string name="list_no_invalid_title">No invalid numbers</string>
+    <string name="list_no_invalid_body">Every number could be recognized.</string>
+    <!-- Banner on top of a list where every number is already formatted. -->
+    <plurals name="list_all_tidy_title">
+        <item quantity="one">Your %d number is tidy</item>
+        <item quantity="other">All %d numbers are tidy</item>
+    </plurals>
+    <string name="list_all_tidy_body">Nothing to update. New or edited numbers will show up here.</string>
+    <!-- Every account with numbers is switched off under "Skip numbers from" in Format options. -->
+    <string name="list_all_skipped_title">All numbers are skipped</string>
+    <string name="list_all_skipped_body">Every account with phone numbers is turned off under “Skip numbers from” in Format options.</string>
+    <string name="list_show_all">Show all</string>
+    <string name="list_error_body">Something went wrong while loading. Your contacts were not changed.</string>
+    <string name="list_error_retry">Try again</string>
+    <string name="list_loading">Loading contacts</string>
+
+    <!-- Floating toolbar -->
+    <string name="list_select_all_visible">Select all shown</string>
+    <string name="list_clear_selection">Clear selection</string>
+    <plurals name="list_update_button">
+        <item quantity="one">Update %d</item>
+        <item quantity="other">Update %d</item>
+    </plurals>
+    <plurals name="list_update_button_description">
+        <item quantity="one">Update %d number</item>
+        <item quantity="other">Update %d numbers</item>
+    </plurals>
+
+    <!-- Confirm dialog -->
+    <plurals name="list_confirm_title">
+        <item quantity="one">Update %d number?</item>
+        <item quantity="other">Update %d numbers?</item>
+    </plurals>
+    <string name="list_confirm_body">Only the phone numbers are rewritten. Names, photos and everything else stay as they are, and you can undo the update afterwards.</string>
+    <string name="list_confirm_update">Update</string>
+
+    <!-- Progress sheet -->
+    <string name="list_progress_apply_title">Updating numbers</string>
+    <string name="list_progress_undo_title">Restoring numbers</string>
+    <!-- "12 of 48" -->
+    <string name="list_progress_count">%1$d of %2$d</string>
+    <string name="list_progress_body">Keep TidyDial open until this finishes.</string>
+
+    <!-- Snackbars -->
+    <plurals name="list_snackbar_updated">
+        <item quantity="one">Updated %d number</item>
+        <item quantity="other">Updated %d numbers</item>
+    </plurals>
+    <plurals name="list_snackbar_skipped">
+        <item quantity="one">%d skipped because it changed</item>
+        <item quantity="other">%d skipped because they changed</item>
+    </plurals>
+    <plurals name="list_snackbar_failed">
+        <item quantity="one">%d failed</item>
+        <item quantity="other">%d failed</item>
+    </plurals>
+    <plurals name="list_snackbar_restored">
+        <item quantity="one">Restored %d number</item>
+        <item quantity="other">Restored %d numbers</item>
+    </plurals>
+    <plurals name="list_snackbar_kept">
+        <item quantity="one">%d kept because it was edited since</item>
+        <item quantity="other">%d kept because they were edited since</item>
+    </plurals>
+    <string name="list_snackbar_undo">Undo</string>
+    <string name="list_snackbar_retry">Retry</string>
+    <string name="list_snackbar_permission_revoked">Contacts access was turned off</string>
+    <!-- The undo record could not be written (for example, the storage is full), so the update did not start. -->
+    <string name="list_snackbar_journal_failed">Couldn’t save the undo record, so nothing was changed. Free up some storage and try again.</string>
+
+    <!-- ===== Format options, country picker, about ===== -->
+    <string name="options_subtitle">Changes show up in the list first. Your contacts are only edited when you tap Update.</string>
+    <string name="options_apply">Apply</string>
+    <string name="options_save_failed">Couldn’t save the format options</string>
+
+    <string name="options_section_country">Country</string>
+    <string name="options_country_summary">Numbers without a country code are read as local to this country.</string>
+    <string name="options_country_auto_detected">Auto-detected</string>
+    <!-- Supporting line when the chosen country differs from the detected one. -->
+    <string name="options_country_change">Tap to change</string>
+
+    <string name="options_section_format">Number format</string>
+    <string name="options_style_international">International</string>
+    <string name="options_style_international_summary">Country code and spaces. Works everywhere.</string>
+    <string name="options_style_national">National</string>
+    <string name="options_style_national_summary">Local style. Foreign numbers stay international.</string>
+    <string name="options_style_e164">E.164</string>
+    <string name="options_style_e164_summary">Compact, without spaces. Best for syncing.</string>
+    <string name="options_style_rfc3966">RFC 3966</string>
+    <string name="options_style_rfc3966_summary">Dialing link format (tel: URI).</string>
+    <string name="options_example_unavailable">No example for this country</string>
+
+    <string name="options_section_extension">Extension delimiter</string>
+    <string name="options_extension_wait">Wait</string>
+    <string name="options_extension_pause">Pause</string>
+    <string name="options_extension_keep">Keep</string>
+    <string name="options_extension_wait_summary">The dialer asks you before it sends the extension digits.</string>
+    <string name="options_extension_pause_summary">The dialer sends the extension digits after a short pause.</string>
+    <string name="options_extension_keep_summary">Each number keeps its own delimiter. Letters p and w become a comma and a semicolon.</string>
+
+    <string name="options_section_short_numbers">Short numbers</string>
+    <string name="options_short_numbers_title">Keep short &amp; emergency numbers</string>
+    <string name="options_short_numbers_summary">Service codes and emergency numbers such as 112 or 911 are never changed.</string>
+
+    <string name="options_section_accounts">Skip numbers from</string>
+    <string name="options_accounts_summary">Messaging apps are skipped by default because they overwrite edits with their own copy of each number.</string>
+    <string name="options_accounts_empty">No contact accounts found on this device yet.</string>
+    <string name="options_account_skipped">Skipped</string>
+    <string name="options_account_included">Included</string>
+
+    <!-- Country picker -->
+    <string name="country_picker_title">Choose country</string>
+    <string name="country_picker_search_hint">Search by name or code</string>
+    <string name="country_picker_detected">Detected</string>
+    <string name="country_picker_all">All countries</string>
+    <string name="country_picker_no_results">No country matches “%1$s”</string>
+
+    <!-- About sheet -->
+    <string name="about_logo_description">TidyDial logo</string>
+    <string name="about_version">Version %1$s (%2$d)</string>
+    <string name="about_description">TidyDial gives every phone number in your contacts one clean, consistent format. You review each change before anything is written, and you can undo the last update.</string>
+    <string name="about_privacy_title">Private by design</string>
+    <string name="about_privacy_offline">No internet permission</string>
+    <string name="about_privacy_no_tracking">No ads, trackers or analytics</string>
+    <string name="about_section_project">Project</string>
+    <string name="about_source_code">Source code</string>
+    <string name="about_source_code_url" translatable="false">https://github.com/bapirex/tidydial</string>
+    <string name="about_source_code_host" translatable="false">github.com/bapirex/tidydial</string>
+    <string name="about_open_in_browser">Opens in your browser</string>
+    <string name="about_no_browser">No app found to open the link</string>
+    <string name="about_license">License</string>
+    <string name="about_license_name" translatable="false">Apache License 2.0</string>
+    <string name="about_libraries">Open-source libraries</string>
+    <string name="about_libraries_summary">Built with these projects</string>
+    <string name="about_expanded">Expanded</string>
+    <string name="about_collapsed">Collapsed</string>
+    <string name="about_library_compose" translatable="false">Jetpack Compose &amp; AndroidX</string>
+    <string name="about_library_material" translatable="false">Material 3 / Material Symbols</string>
+    <string name="about_library_kotlin" translatable="false">Kotlin &amp; kotlinx.coroutines</string>
+    <string name="about_library_libphonenumber" translatable="false">libphonenumber</string>
+    <string name="about_license_apache" translatable="false">Apache-2.0</string>
+</resources>

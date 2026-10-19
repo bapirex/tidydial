@@ -1,0 +1,280 @@
+package org.tidydial.data
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.tidydial.model.ExtensionDelimiter
+import org.tidydial.model.FormatConfig
+import org.tidydial.model.NumberFormatStyle
+
+class PhoneNumberFormatterTest {
+
+    private val formatter = PhoneNumberFormatter()
+
+    private fun us(
+        style: NumberFormatStyle = NumberFormatStyle.INTERNATIONAL,
+        delimiter: ExtensionDelimiter = ExtensionDelimiter.SEMICOLON,
+        preserveShortNumbers: Boolean = true,
+    ) = FormatConfig(
+        countryIso = "US",
+        formatStyle = style,
+        extensionDelimiter = delimiter,
+        preserveShortNumbers = preserveShortNumbers,
+    )
+
+    private fun assertUnchanged(input: String, config: FormatConfig, expectValid: Boolean) {
+        val result = formatter.format(input, config)
+        assertEquals(input, result.formattedNumber)
+        assertFalse(result.isModified)
+        assertEquals(expectValid, result.isValid)
+    }
+
+    // Existing behaviour
+
+    @Test
+    fun nationalFormattingUs() {
+        val result = formatter.format("2125550199", us(NumberFormatStyle.NATIONAL))
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("(212) 555-0199", result.formattedNumber)
+    }
+
+    @Test
+    fun internationalFormattingUs() {
+        val result = formatter.format("2125550199", us())
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("+1 212-555-0199", result.formattedNumber)
+    }
+
+    @Test
+    fun e164Formatting() {
+        val result = formatter.format("(212) 555-0199", us(NumberFormatStyle.E164))
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("+12125550199", result.formattedNumber)
+    }
+
+    @Test
+    fun rfc3966Formatting() {
+        val result = formatter.format("212-555-0199", us(NumberFormatStyle.RFC3966))
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("tel:+1-212-555-0199", result.formattedNumber)
+    }
+
+    @Test
+    fun internationalNumberFromDifferentCountry() {
+        val result = formatter.format("+442079460958", us())
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("+44 20 7946 0958", result.formattedNumber)
+    }
+
+    @Test
+    fun alreadyFormattedNumberIsNotModified() {
+        assertUnchanged("(212) 555-0199", us(NumberFormatStyle.NATIONAL), expectValid = true)
+    }
+
+    @Test
+    fun preserveShortNumbers() {
+        assertUnchanged("911", us(), expectValid = true)
+        assertUnchanged("838255", us(), expectValid = true)
+    }
+
+    @Test
+    fun extensionWithCommaBecomesWait() {
+        val result = formatter.format(
+            "2125550199,456",
+            us(NumberFormatStyle.NATIONAL, ExtensionDelimiter.SEMICOLON),
+        )
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("(212) 555-0199;456", result.formattedNumber)
+    }
+
+    @Test
+    fun extensionWithPBecomesPause() {
+        val result = formatter.format(
+            "2125550199p456",
+            us(NumberFormatStyle.NATIONAL, ExtensionDelimiter.COMMA),
+        )
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals("(212) 555-0199,456", result.formattedNumber)
+    }
+
+    @Test
+    fun ussdCodeIsPreserved() {
+        assertUnchanged("*#06#", us(), expectValid = true)
+    }
+
+    @Test
+    fun textIsNotANumber() {
+        assertUnchanged("abcdef", us(), expectValid = false)
+    }
+
+    @Test
+    fun blankInput() {
+        val result = formatter.format("   ", us())
+        assertFalse(result.isValid)
+        assertFalse(result.isModified)
+    }
+
+    // NATIONAL style never drops a foreign country code
+
+    @Test
+    fun nationalStyleKeepsForeignCountryCode() {
+        val result = formatter.format("+442079460958", us(NumberFormatStyle.NATIONAL))
+        assertTrue(result.isValid)
+        assertEquals("+44 20 7946 0958", result.formattedNumber)
+    }
+
+    @Test
+    fun nationalStyleKeepsCountryCodeOfOtherRegionSharingCallingCode() {
+        val result = formatter.format("+1 416 555 0199", us(NumberFormatStyle.NATIONAL))
+        assertEquals("+1 416-555-0199", result.formattedNumber)
+    }
+
+    @Test
+    fun nationalStyleStripsOwnCountryCode() {
+        val result = formatter.format("+1 212 555 0199", us(NumberFormatStyle.NATIONAL))
+        assertEquals("(212) 555-0199", result.formattedNumber)
+    }
+
+    // Letters, extensions and dial sequences
+
+    @Test
+    fun vanityNumberIsNotSplitAtW() {
+        val result = formatter.format("1-800-FLOWERS", us())
+        assertTrue(result.isValid)
+        assertEquals("+1 800-356-9377", result.formattedNumber)
+        assertFalse(result.formattedNumber.contains(';'))
+        assertFalse(result.formattedNumber.contains(','))
+    }
+
+    @Test
+    fun xExtensionIsHandledByLibphonenumber() {
+        val result = formatter.format("2125550199 x123", us())
+        assertTrue(result.isValid)
+        assertEquals("+1 212-555-0199 ext. 123", result.formattedNumber)
+    }
+
+    @Test
+    fun extDotExtensionIsHandledByLibphonenumber() {
+        val result = formatter.format("212-555-0199 ext. 123", us(NumberFormatStyle.NATIONAL))
+        assertEquals("(212) 555-0199 ext. 123", result.formattedNumber)
+    }
+
+    @Test
+    fun rfc3966ExtensionParameterIsNotTreatedAsWait() {
+        val result = formatter.format("tel:+1-212-555-0199;ext=123", us(NumberFormatStyle.NATIONAL))
+        assertEquals("(212) 555-0199 ext. 123", result.formattedNumber)
+    }
+
+    @Test
+    fun e164KeepsExtensionAsDialSequence() {
+        val result = formatter.format("2125550199 x123", us(NumberFormatStyle.E164))
+        assertEquals("+12125550199;123", result.formattedNumber)
+    }
+
+    @Test
+    fun pBetweenDigitsIsNormalizedToComma() {
+        val result = formatter.format("2125550199p123", us(delimiter = ExtensionDelimiter.KEEP_ORIGINAL))
+        assertEquals("+1 212-555-0199,123", result.formattedNumber)
+    }
+
+    @Test
+    fun wBetweenDigitsIsNormalizedToSemicolon() {
+        val result = formatter.format("2125550199W123", us(delimiter = ExtensionDelimiter.KEEP_ORIGINAL))
+        assertEquals("+1 212-555-0199;123", result.formattedNumber)
+    }
+
+    @Test
+    fun laterDelimitersAreNormalizedButKept() {
+        val result = formatter.format("2125550199,123p456", us(delimiter = ExtensionDelimiter.SEMICOLON))
+        assertEquals("+1 212-555-0199;123,456", result.formattedNumber)
+    }
+
+    // Short and emergency numbers
+
+    @Test
+    fun germanEmergencyNumberIsPreserved() {
+        val config = FormatConfig(countryIso = "DE", preserveShortNumbers = true)
+        assertUnchanged("112", config, expectValid = true)
+        assertUnchanged("110", config, expectValid = true)
+    }
+
+    @Test
+    fun usEmergencyNumberIsPreserved() {
+        assertUnchanged("911", us(NumberFormatStyle.E164), expectValid = true)
+    }
+
+    @Test
+    fun shortNumbersAreStillNotRewrittenWhenPreservationIsOff() {
+        assertUnchanged("911", us(preserveShortNumbers = false), expectValid = false)
+        assertUnchanged(
+            "112",
+            FormatConfig(countryIso = "DE", preserveShortNumbers = false),
+            expectValid = false,
+        )
+    }
+
+    // Invalid numbers are never rewritten
+
+    @Test
+    fun impossibleNumberIsNotModified() {
+        assertUnchanged("21255501", us(), expectValid = false)
+    }
+
+    @Test
+    fun localOnlyNumberIsNotGivenACountryCode() {
+        assertUnchanged("5550199", us(), expectValid = false)
+    }
+
+    @Test
+    fun possibleButInvalidNumberIsNotModified() {
+        assertUnchanged("+1 555 555 5555", us(NumberFormatStyle.E164), expectValid = false)
+    }
+
+    @Test
+    fun surroundingWhitespaceIsPreservedWhenUnchanged() {
+        val result = formatter.format(" (212) 555-0199 ", us(NumberFormatStyle.NATIONAL))
+        assertFalse(result.isModified)
+        assertEquals(" (212) 555-0199 ", result.formattedNumber)
+    }
+
+    // Example numbers for previews
+
+    @Test
+    fun exampleNumberInEachStyle() {
+        val international = formatter.exampleNumber("DE", NumberFormatStyle.INTERNATIONAL)
+        val national = formatter.exampleNumber("de", NumberFormatStyle.NATIONAL)
+        val e164 = formatter.exampleNumber("DE", NumberFormatStyle.E164)
+        val rfc = formatter.exampleNumber("DE", NumberFormatStyle.RFC3966)
+
+        assertNotNull(international)
+        assertTrue(international!!.startsWith("+49 "))
+        assertNotNull(national)
+        assertTrue(national!!.startsWith("0"))
+        assertNotNull(e164)
+        assertTrue(e164!!.matches(Regex("""\+49\d+""")))
+        assertNotNull(rfc)
+        assertTrue(rfc!!.startsWith("tel:+49-"))
+    }
+
+    @Test
+    fun exampleNumberRoundTripsThroughFormatter() {
+        val config = us(NumberFormatStyle.NATIONAL)
+        val example = formatter.exampleNumber("US", NumberFormatStyle.NATIONAL)!!
+        assertUnchanged(example, config, expectValid = true)
+    }
+
+    @Test
+    fun exampleNumberForUnknownRegionIsNull() {
+        assertNull(formatter.exampleNumber("ZZ", NumberFormatStyle.INTERNATIONAL))
+    }
+}

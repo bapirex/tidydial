@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 11 and lower: the undo journal (phone numbers) lives in noBackupFilesDir, which is never
+    backed up. Any copy in files/ and its temporary file are excluded as well.
+-->
+<full-backup-content>
+    <exclude
+        domain="file"
+        path="undo_journal.json" />
+    <exclude
+        domain="file"
+        path="undo_journal.json.tmp" />
+</full-backup-content>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand scheme (seed #1F6FD1): light primaryContainer / onPrimaryContainer -->
+    <color name="ic_launcher_background">#D6E3FF</color>
+    <color name="ic_launcher_foreground_color">#001B3E</color>
+</resources>

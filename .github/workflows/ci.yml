@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Unit tests, lint and release build
+        run: ./gradlew testDebugUnitTest lintDebug assembleRelease
+
+      # Baselines in app/src/test/screenshots were recorded on macOS; Linux font
+      # rasterisation can differ by a few pixels. Make this step blocking once the
+      # baselines have been re-recorded on CI (./gradlew recordRoborazziDebug).
+      - name: Verify screenshots
+        continue-on-error: true
+        run: ./gradlew verifyRoborazziDebug
+
+      - name: Upload test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/roborazzi/
+          if-no-files-found: ignore
+          retention-days: 14
