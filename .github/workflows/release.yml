@@ -123,9 +123,17 @@ jobs:
           aab=app/build/outputs/bundle/release/app-release.aab
 
           "$build_tools/apksigner" verify --verbose --print-certs "$apk" | tee apksigner.txt
-          cert=$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([0-9a-f]+)$/\1/p' apksigner.txt)
-          if [ "$cert" != "$EXPECTED_CERT_SHA256" ]; then
-            echo "::error::APK is signed with certificate $cert, expected $EXPECTED_CERT_SHA256"
+          # Depending on the build-tools version and flags, signers are printed as
+          # "Signer #1 certificate SHA-256 digest: …" or "V2 Signer: certificate SHA-256 digest: …".
+          # Every signer, in every scheme, must be the release certificate.
+          apk_certs=$(grep -oE 'certificate SHA-256 digest: [0-9a-f]{64}' apksigner.txt | awk '{print $NF}' | sort -u)
+          if [ "$apk_certs" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK signer certificate(s) [${apk_certs//$'\n'/, }] do not match $EXPECTED_CERT_SHA256"
+            exit 1
+          fi
+          aab_cert=$(keytool -printcert -jarfile "$aab" | sed -n 's/^.*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f' | sort -u)
+          if [ "$aab_cert" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::AAB is signed with certificate [${aab_cert//$'\n'/, }], expected $EXPECTED_CERT_SHA256"
             exit 1
           fi
           jarsigner_output=$(jarsigner -verify "$aab")
