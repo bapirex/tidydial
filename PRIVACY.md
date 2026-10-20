@@ -56,5 +56,5 @@ Any change to this policy will be published in this file in the
 
 ## Contact
 
-For privacy questions, email CONTACT_EMAIL_PLACEHOLDER. For anything else, please open an issue at
+For privacy questions, email umbrauniversum@gmail.com. For anything else, please open an issue at
 <https://github.com/bapirex/tidydial/issues>.
