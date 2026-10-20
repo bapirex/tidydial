@@ -73,8 +73,9 @@ keytool -list -v -keystore ~/tidydial-release-keys/tidydial-release.jks -alias t
   | sed -n 's/^.*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f'
 ```
 
-After a release, the same value is the `Signer #1 certificate SHA-256 digest` printed by
-`apksigner verify --print-certs tidydial-X.Y.Z.apk` (in the Android SDK's `build-tools`).
+After a release, the same value is the `certificate SHA-256 digest` printed by
+`apksigner verify --print-certs tidydial-X.Y.Z.apk` (in the Android SDK's `build-tools`; depending on
+the version the line starts with `Signer #1` or `V2 Signer:`).
 
 Put it in `.github/workflows/release.yml` (`EXPECTED_CERT_SHA256`) and
 `docs/fdroid/org.tidydial.yml` (`AllowedAPKSigningKeys`).
