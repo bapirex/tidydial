@@ -1,0 +1,28 @@
+Categories:
+  - Contact
+  - Phone & SMS
+License: Apache-2.0
+AuthorName: Bapi Vinnakota
+AuthorEmail: CONTACT_EMAIL_PLACEHOLDER
+SourceCode: https://github.com/bapirex/tidydial
+IssueTracker: https://github.com/bapirex/tidydial/issues
+Changelog: https://github.com/bapirex/tidydial/releases
+
+RepoType: git
+Repo: https://github.com/bapirex/tidydial.git
+Binaries: https://github.com/bapirex/tidydial/releases/download/v%v/tidydial-%v.apk
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    subdir: app
+    gradle:
+      - yes
+
+AllowedAPKSigningKeys: SIGNING_CERT_SHA256_PLACEHOLDER
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1
