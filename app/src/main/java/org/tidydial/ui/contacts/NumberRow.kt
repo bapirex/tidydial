@@ -129,7 +129,8 @@ fun NumberRow(
 
 /**
  * A number that is already formatted: number, label and a quiet check, on one line when they
- * fit. The number is never cut off; the label and account badges wrap below it instead.
+ * fit. The number is never cut off; the label and account badges move below it together, so
+ * the accounts of one number are never split across lines.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -158,13 +159,21 @@ private fun TidyNumberRow(
                 text = item.entry.formattedNumber,
                 style = PhoneNumberTextStyles.large,
             )
-            Text(
-                text = item.entry.typeLabel,
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-            if (showAccount) item.accountLabels.forEach { AccountBadge(it) }
+            // One FlowRow item, so the whole group wraps as a unit; it only breaks internally
+            // when it is wider than a full line on its own.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.entry.typeLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+                if (showAccount) item.accountLabels.forEach { AccountBadge(it) }
+            }
         }
         Icon(
             imageVector = CheckIcon,
