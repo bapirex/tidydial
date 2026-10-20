@@ -27,11 +27,11 @@ class AboutScreenshotTest {
     fun aboutDark() = capture("about_dark", darkTheme = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h1950dp-xxhdpi")
     fun aboutExpandedFontScale() = capture("about_expanded_font_1_5", fontScale = 1.5f, expanded = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h1200dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     fun aboutExpanded() = capture("about_expanded", expanded = true)
 
     private fun capture(

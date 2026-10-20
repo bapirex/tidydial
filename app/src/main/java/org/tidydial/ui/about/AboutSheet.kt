@@ -198,11 +198,16 @@ private fun PromiseRow(promise: Promise) {
 
 private class Library(@StringRes val name: Int, @StringRes val license: Int)
 
+/** Same components, grouped the same way, as NOTICE and the README credits. */
 private val Libraries = listOf(
     Library(R.string.about_library_compose, R.string.about_license_apache),
     Library(R.string.about_library_material, R.string.about_license_apache),
-    Library(R.string.about_library_kotlin, R.string.about_license_apache),
+    Library(R.string.about_library_material_symbols, R.string.about_license_apache),
     Library(R.string.about_library_libphonenumber, R.string.about_license_apache),
+    Library(R.string.about_library_kotlin, R.string.about_license_apache),
+    Library(R.string.about_library_okio, R.string.about_license_apache),
+    Library(R.string.about_library_annotations, R.string.about_license_apache),
+    Library(R.string.about_library_protobuf, R.string.about_license_bsd3),
 )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

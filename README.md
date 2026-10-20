@@ -14,6 +14,12 @@
   <a href="#building-from-source"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-orange.svg" alt="Android 8.0+" /></a>
 </p>
 
+<!--
+  Store badges go here once the listings are live (follow each store's badge guidelines):
+  - Get it on F-Droid: https://f-droid.org/packages/org.tidydial/
+  - Get it on Google Play: https://play.google.com/store/apps/details?id=org.tidydial
+-->
+
 TidyDial reads the phone numbers in your address book, shows you how each one would look in the
 format you choose, and rewrites only the numbers you approve. Parsing and formatting are done
 on the device with Google's [libphonenumber](https://github.com/google/libphonenumber).
@@ -133,14 +139,37 @@ fastlane/metadata/android/    Store listing (F-Droid / fastlane format)
 ## Contributing
 
 Bug reports, translations and pull requests are welcome. Please read
-[CONTRIBUTING.md](CONTRIBUTING.md) first. In short:
+[CONTRIBUTING.md](CONTRIBUTING.md) first, and follow the [code of conduct](CODE_OF_CONDUCT.md).
+In short:
 
 - Keep the app offline. Do not add the `INTERNET` permission or any tracking, analytics or
   proprietary dependency.
-- Run `./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug` before you open a pull
-  request. If a UI change is intended, re-record the screenshots with `recordRoborazziDebug` and
-  include them in the PR.
+- Run `./gradlew testDebugUnitTest lintDebug assembleRelease verifyRoborazziDebug` before you
+  open a pull request. If a UI change is intended, re-record the screenshots with
+  `recordRoborazziDebug` and include them in the PR.
 - Put all user-facing text in `app/src/main/res/values/strings.xml`.
+
+CI runs the tests, lint, the screenshot check and a release build on pushes to `main` and on
+every pull request.
+
+To report a security problem, do not open a public issue. See [SECURITY.md](SECURITY.md) for how
+to report it privately.
+
+## Credits
+
+TidyDial is built with these open-source projects. [NOTICE](NOTICE) has the copyright notices,
+and the app lists them under **About > Open-source libraries**.
+
+| Component | License |
+| :--- | :--- |
+| [Android Jetpack / AndroidX](https://developer.android.com/jetpack/androidx): Jetpack Compose, Activity, Lifecycle, Core, Core SplashScreen, DataStore, Graphics (graphics-shapes) and their AndroidX dependencies | Apache-2.0 |
+| [Material 3 for Jetpack Compose](https://developer.android.com/jetpack/androidx/releases/compose-material3) | Apache-2.0 |
+| [Material Symbols](https://github.com/google/material-design-icons) icons (Rounded; the logo's handset is the "call" symbol), from commit `49d4db35df873165d6bd6ba09b063c7dafbac2f4` | Apache-2.0 |
+| [libphonenumber](https://github.com/google/libphonenumber) | Apache-2.0 |
+| [Kotlin](https://github.com/JetBrains/kotlin) standard library, [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) and [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Apache-2.0 |
+| [Okio](https://github.com/square/okio) (used by DataStore) | Apache-2.0 |
+| [JetBrains Java Annotations](https://github.com/JetBrains/java-annotations), [JSpecify](https://github.com/jspecify/jspecify) and [Guava](https://github.com/google/guava) ListenableFuture | Apache-2.0 |
+| [Protocol Buffers](https://github.com/protocolbuffers/protobuf) (lite runtime, repackaged by DataStore) | BSD-3-Clause |
 
 ## Historical inspiration
 
@@ -148,6 +177,8 @@ TidyDial is inspired by an earlier, long-unmaintained contacts formatter for And
 written from scratch as free and open-source software.
 
 ## License
+
+TidyDial is licensed under the [Apache License 2.0](LICENSE) (SPDX: `Apache-2.0`).
 
 ```text
 Copyright 2026 TidyDial Contributors
@@ -165,4 +196,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-Third-party components and their licenses are listed in [NOTICE](NOTICE).
+Third-party components, their copyright notices and their licenses are listed in
+[NOTICE](NOTICE) and under [Credits](#credits). Contributions are accepted under the same
+Apache 2.0 license (see [CONTRIBUTING.md](CONTRIBUTING.md)).

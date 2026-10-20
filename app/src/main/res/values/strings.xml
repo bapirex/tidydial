@@ -242,8 +242,13 @@
     <string name="about_expanded">Expanded</string>
     <string name="about_collapsed">Collapsed</string>
     <string name="about_library_compose" translatable="false">Jetpack Compose &amp; AndroidX</string>
-    <string name="about_library_material" translatable="false">Material 3 / Material Symbols</string>
-    <string name="about_library_kotlin" translatable="false">Kotlin &amp; kotlinx.coroutines</string>
+    <string name="about_library_material" translatable="false">Material 3 for Compose</string>
+    <string name="about_library_material_symbols" translatable="false">Material Symbols</string>
     <string name="about_library_libphonenumber" translatable="false">libphonenumber</string>
+    <string name="about_library_kotlin" translatable="false">Kotlin &amp; kotlinx libraries</string>
+    <string name="about_library_okio" translatable="false">Okio</string>
+    <string name="about_library_protobuf" translatable="false">Protocol Buffers</string>
+    <string name="about_library_annotations" translatable="false">JetBrains Annotations, JSpecify &amp; Guava</string>
     <string name="about_license_apache" translatable="false">Apache-2.0</string>
+    <string name="about_license_bsd3" translatable="false">BSD-3-Clause</string>
 </resources>
