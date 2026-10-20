@@ -112,6 +112,16 @@ class FastScrollerTest {
     }
 
     @Test
+    fun numberIsNeverCutOffNextToRailAndBadges() {
+        setList(tidyState)
+        composeRule.onNodeWithContentDescription("Jump to G").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // The row merges its text into one TalkBack sentence, so this is checked visually:
+        // Gus Golf's number must show in full, with its Google and Google Meet badges wrapped.
+        composeRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/contacts_fast_scroll_badges.png")
+    }
+
+    @Test
     fun railScreenshot() {
         setList(tidyState)
         composeRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/contacts_fast_scroll.png")

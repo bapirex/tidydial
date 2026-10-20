@@ -99,7 +99,11 @@ object SampleData {
     ).mapIndexed { i, name ->
         val number = "+1 212-555-%04d".format(Locale.ROOT, 200 + i)
         entry(3000L + i, 300L + i, name, number, number, "Mobile", GOOGLE)
-    }
+    }.let { entries ->
+        // Same number synced from Google and Google Meet: two badges next to the number.
+        val gus = entries.first { it.displayName == "Gus Golf" }
+        entries + gus.copy(dataId = 3999, accountType = MEET, accountLabel = "Google Meet")
+    }.sortedBy { it.displayName }
 
     /** Ids the app pre-selects after a load: every valid number that would change. */
     val defaultSelection: Set<Long> = entries.filter { it.isSelectable }.map { it.dataId }.toSet()

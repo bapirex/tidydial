@@ -127,7 +127,11 @@ fun NumberRow(
     }
 }
 
-/** A number that is already formatted: label, number and a quiet check on one line. */
+/**
+ * A number that is already formatted: number, label and a quiet check, on one line when they
+ * fit. The number is never cut off; the label and account badges wrap below it instead.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TidyNumberRow(
     item: NumberItem,
@@ -144,18 +148,15 @@ private fun TidyNumberRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
+        FlowRow(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
-            // Unweighted labels are measured first; the number takes the rest and ellipsizes.
             Text(
                 text = item.entry.formattedNumber,
                 style = PhoneNumberTextStyles.large,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
             )
             Text(
                 text = item.entry.typeLabel,
