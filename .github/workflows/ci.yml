@@ -38,11 +38,7 @@ jobs:
       - name: Unit tests, lint and release build
         run: ./gradlew testDebugUnitTest lintDebug assembleRelease
 
-      # Baselines in app/src/test/screenshots were recorded on macOS; Linux font
-      # rasterisation can differ by a few pixels. Make this step blocking once the
-      # baselines have been re-recorded on CI (./gradlew recordRoborazziDebug).
       - name: Verify screenshots
-        continue-on-error: true
         run: ./gradlew verifyRoborazziDebug
 
       - name: Upload test and lint reports
