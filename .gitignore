@@ -36,10 +36,12 @@ proguard/
 .idea/
 .navigation/
 
-# Keystore / signing files
+# Keystore / signing files (release signing reads TIDYDIAL_* environment variables)
 *.jks
 *.keystore
 *.idsig
+release-keys/
+*.properties.local
 
 # External native build folder
 .externalNativeBuild

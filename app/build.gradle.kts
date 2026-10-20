@@ -4,6 +4,18 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// Release signing comes only from the environment (the release workflow, or a maintainer's
+// shell). Without all four variables the release APK/AAB are left unsigned, which is what
+// F-Droid's build server needs: it builds from source without secrets and compares the result
+// with the signed APK from the GitHub Release.
+private val releaseSigningEnv: Map<String, String>? = listOf(
+    "TIDYDIAL_KEYSTORE",
+    "TIDYDIAL_KEYSTORE_PASSWORD",
+    "TIDYDIAL_KEY_ALIAS",
+    "TIDYDIAL_KEY_PASSWORD",
+).associateWith { providers.environmentVariable(it).orNull.orEmpty() }
+    .takeIf { env -> env.values.all { it.isNotEmpty() } }
+
 android {
     namespace = "org.tidydial"
     compileSdk = 37
@@ -16,8 +28,22 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        if (releaseSigningEnv != null) {
+            create("release") {
+                storeFile = file(releaseSigningEnv.getValue("TIDYDIAL_KEYSTORE"))
+                storePassword = releaseSigningEnv.getValue("TIDYDIAL_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningEnv.getValue("TIDYDIAL_KEY_ALIAS")
+                keyPassword = releaseSigningEnv.getValue("TIDYDIAL_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningEnv != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -58,6 +84,17 @@ android {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// Reproducible builds: the ART baseline profile (assets/dexopt/baseline.prof and .profm) is
+// not byte-for-byte stable between builds, so F-Droid's verification of the release APK would
+// fail. Leave it out of release builds (R8 then also stops using it to lay out classes.dex);
+// debug builds keep it. A tree that built release before this needs `./gradlew clean` once,
+// because disabled tasks leave their old outputs behind.
+tasks.configureEach {
+    if (name.contains("ArtProfile") && name.contains("Release")) {
+        enabled = false
+    }
 }
 
 dependencies {
