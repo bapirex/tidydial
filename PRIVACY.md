@@ -36,8 +36,9 @@ and lower). Uninstalling the app or clearing its storage deletes everything.
 
 ## Third parties
 
-TidyDial does not include third-party services. Its open-source libraries (AndroidX, Jetpack
-Compose, Material 3, Kotlin and libphonenumber) run entirely on your device. Phone numbers are
+TidyDial does not include third-party services. Its open-source libraries (AndroidX and Jetpack
+Compose, Material 3, Kotlin, libphonenumber and the others listed in
+[NOTICE](NOTICE)) run entirely on your device. Phone numbers are
 parsed and formatted locally with Google's libphonenumber library, which needs no network access.
 
 Opening the source code link from the About screen hands the link to your web browser. TidyDial
@@ -55,4 +56,5 @@ Any change to this policy will be published in this file in the
 
 ## Contact
 
-Please open an issue at <https://github.com/bapirex/tidydial/issues>.
+For privacy questions, email CONTACT_EMAIL_PLACEHOLDER. For anything else, please open an issue at
+<https://github.com/bapirex/tidydial/issues>.
