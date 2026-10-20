@@ -28,7 +28,7 @@ jobs:
       HAS_PLAY_CREDENTIALS: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
       # SHA-256 of the release signing certificate (lowercase hex, no colons). The build fails
       # if the APK is signed with any other key, which would break updates on both stores.
-      EXPECTED_CERT_SHA256: SIGNING_CERT_SHA256_PLACEHOLDER
+      EXPECTED_CERT_SHA256: 045e61f694580b2833a6be81f432741b264685bdcef6a1a792580a786a787e5c
 
     steps:
       - name: Check out
