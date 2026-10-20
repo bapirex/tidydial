@@ -43,12 +43,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.layout.layout
@@ -107,8 +112,8 @@ private val RailPadding = 8.dp
 
 /**
  * Vertical letter index that jumps [listState] to a section. Press or drag along the rail;
- * a bubble shows the letter under the finger. TalkBack users get one "Jump to" action per
- * visible letter.
+ * a bubble shows the letter under the finger. For TalkBack the rail is one adjustable control:
+ * swipe up or down to move a section, or pick any letter from the actions menu.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -141,6 +146,16 @@ fun FastScrollRail(
     }
 
     val railDescription = stringResource(R.string.list_fast_scroll)
+    val sectionDescription = stringResource(R.string.list_fast_scroll_section, sections[currentIndex].label)
+    val resources = LocalResources.current
+    val jumpActions = remember(sections, listState, resources) {
+        sections.mapIndexed { i, section ->
+            CustomAccessibilityAction(resources.getString(R.string.list_fast_scroll_jump, section.label)) {
+                jumpTo(i)
+                true
+            }
+        }
+    }
     val railColor by animateColorAsState(
         targetValue = if (dragging) scheme.secondaryContainer else scheme.surfaceContainerHigh,
         animationSpec = motion.fastEffectsSpec(),
@@ -160,7 +175,20 @@ fun FastScrollRail(
                     .clip(CircleShape)
                     .background(railColor)
                     .padding(vertical = RailPadding)
-                    .semantics { contentDescription = railDescription }
+                    .semantics {
+                        contentDescription = railDescription
+                        stateDescription = sectionDescription
+                        progressBarRangeInfo = ProgressBarRangeInfo(
+                            current = currentIndex.toFloat(),
+                            range = 0f..(sections.size - 1).toFloat(),
+                            steps = (sections.size - 2).coerceAtLeast(0),
+                        )
+                        setProgress { target ->
+                            jumpTo(target.roundToInt())
+                            true
+                        }
+                        customActions = jumpActions
+                    }
                     .pointerInput(sections) {
                         fun update(y: Float) {
                             touchY = y
@@ -195,7 +223,6 @@ fun FastScrollRail(
                         label = sections[index].label,
                         highlighted = index == highlighted ||
                             (step > 1 && highlighted in index until index + step),
-                        onJump = { jumpTo(index) },
                     )
                 }
             }
@@ -234,10 +261,10 @@ fun FastScrollRail(
     }
 }
 
+/** A drawn letter only; the rail carries the accessibility semantics for all of them. */
 @Composable
-private fun RailLabel(label: String, highlighted: Boolean, onJump: () -> Unit) {
+private fun RailLabel(label: String, highlighted: Boolean) {
     val scheme = MaterialTheme.colorScheme
-    val jumpDescription = stringResource(R.string.list_fast_scroll_jump, label)
     val color by animateColorAsState(
         targetValue = if (highlighted) scheme.primary else scheme.onSurfaceVariant,
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
@@ -247,11 +274,7 @@ private fun RailLabel(label: String, highlighted: Boolean, onJump: () -> Unit) {
         text = label,
         modifier = Modifier
             .height(SlotHeight)
-            .semantics {
-                contentDescription = jumpDescription
-                role = Role.Button
-                onClick { onJump(); true }
-            },
+            .clearAndSetSemantics {},
         style = MaterialTheme.typography.labelMedium,
         fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Medium,
         color = color,

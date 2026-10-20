@@ -5,6 +5,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -13,6 +15,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -101,21 +104,54 @@ class FastScrollerTest {
         composeRule.onAllNodesWithContentDescription("Quick scroll index").assertCountEquals(0)
     }
 
+    /** Runs the rail's TalkBack "Jump to [label]" action. */
+    private fun jumpTo(label: String) {
+        val rail = composeRule.onNodeWithContentDescription("Quick scroll index")
+        val action = rail.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == "Jump to $label" }
+        composeRule.runOnIdle { action.action() }
+        composeRule.waitForIdle()
+    }
+
+    private fun firstVisibleName(): String =
+        tidyState.groups[listState.firstVisibleItemIndex - 1].displayName
+
     @Test
     fun jumpActionScrollsToSection() {
         setList(tidyState)
-        composeRule.onNodeWithContentDescription("Jump to S")
-            .performSemanticsAction(SemanticsActions.OnClick)
+        jumpTo("S")
+        assertTrue("first visible is ${firstVisibleName()}", firstVisibleName().startsWith("S"))
+    }
+
+    @Test
+    fun railIsOneAccessibleControl() {
+        setList(tidyState)
+        // Letters are drawn only; no tiny, overlapping focus targets.
+        composeRule.onAllNodesWithContentDescription("Jump to", substring = true).assertCountEquals(0)
+        val config = composeRule.onNodeWithContentDescription("Quick scroll index").fetchSemanticsNode().config
+        assertEquals("Section #", config[SemanticsProperties.StateDescription])
+        val sections = ContactIndexer(Locale.ENGLISH).sections(tidyState.groups.map { it.displayName })
+        assertEquals((sections.size - 1).toFloat(), config[SemanticsProperties.ProgressBarRangeInfo].range.endInclusive)
+        assertEquals(sections.size, config[SemanticsActions.CustomActions].size)
+    }
+
+    @Test
+    fun setProgressMovesBySection() {
+        setList(tidyState)
+        val sections = ContactIndexer(Locale.ENGLISH).sections(tidyState.groups.map { it.displayName })
+        val target = sections.indexOfFirst { it.label == "M" }
+        composeRule.onNodeWithContentDescription("Quick scroll index")
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(target.toFloat()) }
         composeRule.waitForIdle()
-        val first = tidyState.groups[listState.firstVisibleItemIndex - 1].displayName
-        assertTrue("first visible is $first", first.startsWith("S"))
+        assertTrue("first visible is ${firstVisibleName()}", firstVisibleName().startsWith("M"))
+        composeRule.onNodeWithContentDescription("Quick scroll index")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Section M"))
     }
 
     @Test
     fun numberIsNeverCutOffNextToRailAndBadges() {
         setList(tidyState)
-        composeRule.onNodeWithContentDescription("Jump to G").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        jumpTo("G")
         // The row merges its text into one TalkBack sentence, so this is checked visually:
         // Gus Golf's number must show in full, with its Google and Google Meet badges wrapped.
         composeRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/contacts_fast_scroll_badges.png")
