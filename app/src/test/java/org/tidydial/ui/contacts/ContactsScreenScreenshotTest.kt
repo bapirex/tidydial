@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.platform.testTag
@@ -239,7 +241,10 @@ class ContactsScreenScreenshotTest {
     @Test
     fun confirmDialog() {
         setScreen()
-        composeRule.onNodeWithText("Update 6").performClick()
+        // A semantics click opens the dialog without a touch ripple, which renders nondeterministically.
+        composeRule.onNodeWithText("Update 6").performSemanticsAction(SemanticsActions.OnClick)
+        // Let the dialog and toolbar entrance animations finish so frames are identical.
+        composeRule.mainClock.advanceTimeBy(2_000)
         composeRule.waitForIdle()
         captureScreenRoboImage(filePath = "$DIR/contacts_confirm.png")
     }

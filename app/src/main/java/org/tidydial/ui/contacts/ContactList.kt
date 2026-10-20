@@ -26,9 +26,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -62,41 +64,73 @@ fun ContactList(
     listState: LazyListState = rememberLazyListState(),
 ) {
     val layoutDirection = LocalLayoutDirection.current
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        state = listState,
-        contentPadding = PaddingValues(
-            start = contentPadding.calculateStartPadding(layoutDirection) + 16.dp,
-            end = contentPadding.calculateEndPadding(layoutDirection) + 16.dp,
-            top = 8.dp,
-            bottom = contentPadding.calculateBottomPadding() + bottomClearance,
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        if (state.showsAllTidy) {
-            item(key = "all-tidy", contentType = "all-tidy") {
-                AllTidyCard(
-                    total = state.counts.total,
+    val showsAllTidy = state.showsAllTidy
+    val locale = LocalConfiguration.current.locales[0]
+    val indexer = remember(locale) { ContactIndexer(locale) }
+    val sections = remember(state.groups, showsAllTidy, indexer) {
+        if (state.groups.size < MinContactsForFastScroll) {
+            emptyList()
+        } else {
+            indexer.sections(state.groups.map { it.displayName }, firstItemIndex = if (showsAllTidy) 1 else 0)
+        }
+    }
+    val showRail = sections.size >= MinSectionsForFastScroll
+    val bottom = contentPadding.calculateBottomPadding() + bottomClearance
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(
+                start = contentPadding.calculateStartPadding(layoutDirection) + 16.dp,
+                end = contentPadding.calculateEndPadding(layoutDirection) + 16.dp +
+                    if (showRail) FastScrollRailWidth else 0.dp,
+                top = 8.dp,
+                bottom = bottom,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (showsAllTidy) {
+                item(key = "all-tidy", contentType = "all-tidy") {
+                    AllTidyCard(
+                        total = state.counts.total,
+                        modifier = Modifier
+                            .widthIn(max = MaxContentWidth)
+                            .animateItem(),
+                    )
+                }
+            }
+            items(state.groups, key = { it.contactId }, contentType = { "contact" }) { group ->
+                ContactCard(
+                    group = group,
+                    selection = state.selection,
+                    onToggleEntries = { onAction(UiAction.ToggleEntries(it)) },
+                    onToggleContact = { id, ids -> onAction(UiAction.ToggleContact(id, ids)) },
                     modifier = Modifier
                         .widthIn(max = MaxContentWidth)
                         .animateItem(),
                 )
             }
         }
-        items(state.groups, key = { it.contactId }, contentType = { "contact" }) { group ->
-            ContactCard(
-                group = group,
-                selection = state.selection,
-                onToggleEntries = { onAction(UiAction.ToggleEntries(it)) },
-                onToggleContact = { id, ids -> onAction(UiAction.ToggleContact(id, ids)) },
+        if (showRail) {
+            FastScrollRail(
+                sections = sections,
+                listState = listState,
                 modifier = Modifier
-                    .widthIn(max = MaxContentWidth)
-                    .animateItem(),
+                    .align(Alignment.CenterEnd)
+                    .padding(
+                        end = contentPadding.calculateEndPadding(layoutDirection) + 4.dp,
+                        top = 8.dp,
+                        bottom = bottom,
+                    ),
             )
         }
     }
 }
+
+/** The rail only earns its space on lists long enough to need it. */
+private const val MinContactsForFastScroll = 20
+private const val MinSectionsForFastScroll = 3
 
 /** The unfiltered list of an address book with nothing to fix. */
 private val UiState.showsAllTidy: Boolean

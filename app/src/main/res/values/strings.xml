@@ -110,6 +110,8 @@
         <item quantity="other">All %d numbers are tidy</item>
     </plurals>
     <string name="list_all_tidy_body">Nothing to update. New or edited numbers will show up here.</string>
+    <string name="list_fast_scroll">Quick scroll index</string>
+    <string name="list_fast_scroll_jump">Jump to %1$s</string>
     <!-- Every account with numbers is switched off under "Skip numbers from" in Format options. -->
     <string name="list_all_skipped_title">All numbers are skipped</string>
     <string name="list_all_skipped_body">Every account with phone numbers is turned off under “Skip numbers from” in Format options.</string>

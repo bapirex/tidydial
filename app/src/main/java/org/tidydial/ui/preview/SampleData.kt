@@ -13,6 +13,7 @@ import org.tidydial.ui.PermissionStatus
 import org.tidydial.ui.UiState
 import org.tidydial.ui.UpdateProgress
 import org.tidydial.ui.isSelectable
+import java.util.Locale
 
 /**
  * Obviously fake contacts for previews and screenshot tests: names are placeholders and numbers
@@ -86,6 +87,19 @@ object SampleData {
     /** Every number already formatted. */
     val tidyEntries: List<PhoneEntry> = mostlyTidyEntries
         .filter { !it.isModified }
+
+    /** A long, already tidy address book (A to Z plus "#") for the fast-scroll rail. */
+    val manyTidyEntries: List<PhoneEntry> = listOf(
+        "24h Locksmith", "Aiden Alpha", "Amara Atlas", "Bea Bravo", "Cyril Charlie", "Dee Delta",
+        "Eli Echo", "Émile Ember", "Faye Foxtrot", "Gus Golf", "Hana Hotel", "Ivo India",
+        "Jun Juliet", "Kit Kilo", "Lou Lima", "Max Mike", "Mila Moss", "Nia November",
+        "Oto Oscar", "Pia Papa", "Quinn Quebec", "Rio Romeo", "Sol Sierra", "Sky Summit",
+        "Tao Tango", "Uma Uniform", "Val Victor", "Wes Whiskey", "Xan Xray", "Yuki Yankee",
+        "Zed Zulu",
+    ).mapIndexed { i, name ->
+        val number = "+1 212-555-%04d".format(Locale.ROOT, 200 + i)
+        entry(3000L + i, 300L + i, name, number, number, "Mobile", GOOGLE)
+    }
 
     /** Ids the app pre-selects after a load: every valid number that would change. */
     val defaultSelection: Set<Long> = entries.filter { it.isSelectable }.map { it.dataId }.toSet()
