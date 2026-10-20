@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Branch pushes are covered by their pull request; building them too doubles every run.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
