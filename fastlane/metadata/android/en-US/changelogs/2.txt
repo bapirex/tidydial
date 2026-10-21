@@ -1,0 +1,9 @@
+First release of TidyDial.
+
+* Format phone numbers as International, National, E.164 or RFC 3966
+* Automatic country detection with a searchable country picker
+* Review list grouped by contact, with before and after for each number, filters and search
+* Update only the numbers you select, and undo the last update
+* Skips messaging-app accounts, emergency numbers and short codes by default
+* Material 3 Expressive design, dynamic color and dark theme
+* Works offline, with no internet permission

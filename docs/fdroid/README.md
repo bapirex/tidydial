@@ -13,7 +13,7 @@ this file. F-Droid reads them from `fastlane/metadata/android/` in this reposito
 
 TidyDial uses a developer-signed reproducible build:
 
-1. F-Droid checks out the `v1.0.0` tag and runs `assembleRelease` in `app/`.
+1. F-Droid checks out the `v1.0.1` tag and runs `assembleRelease` in `app/`.
    No signing variables are set, so this gives an unsigned APK.
 2. It downloads our signed APK from the GitHub Release (`Binaries:`).
 3. It checks that our APK is signed by our key (`AllowedAPKSigningKeys:`) and is
@@ -31,9 +31,9 @@ wrapper, which already knows Gradle 9.8.2 and has the same checksum as
 
 ## Before submitting
 
-1. Tag `v1.0.0` and let the release workflow publish `tidydial-1.0.0.apk` to
+1. Tag `v1.0.1` and let the release workflow publish `tidydial-1.0.1.apk` to
    the GitHub Release. The download URL must be exactly
-   `https://github.com/bapirex/tidydial/releases/download/v1.0.0/tidydial-1.0.0.apk`.
+   `https://github.com/bapirex/tidydial/releases/download/v1.0.1/tidydial-1.0.1.apk`.
 2. Check the two values in `net.evopoint.tidydial.yml` that this repository cannot
    derive, and fill them in if they are still placeholders:
    - `AuthorEmail`: the public contact address.
@@ -41,7 +41,7 @@ wrapper, which already knows Gradle 9.8.2 and has the same checksum as
      in lowercase hex with no colons:
 
      ```sh
-     apksigner verify --print-certs tidydial-1.0.0.apk \
+     apksigner verify --print-certs tidydial-1.0.1.apk \
        | sed -n 's/.*certificate SHA-256 digest: //p'
      ```
 
@@ -56,10 +56,10 @@ wrapper, which already knows Gradle 9.8.2 and has the same checksum as
    with JDK 21 and no signing variables, then compare:
 
    ```sh
-   git clone --branch v1.0.0 https://github.com/bapirex/tidydial.git /tmp/td
+   git clone --branch v1.0.1 https://github.com/bapirex/tidydial.git /tmp/td
    (cd /tmp/td && ./gradlew assembleRelease)
    pip install apksigcopier   # needs apksigner on PATH
-   apksigcopier compare tidydial-1.0.0.apk \
+   apksigcopier compare tidydial-1.0.1.apk \
      --unsigned /tmp/td/app/build/outputs/apk/release/app-release-unsigned.apk \
      && echo reproducible
    ```
@@ -176,9 +176,9 @@ I am the author of the app.
   profiles (`assets/dexopt/baseline.prof[m]`), different JDK or Android SDK
   versions, and building from a dirty tree. Release only from a clean checkout of
   the tag, and run the `apksigcopier compare` check above for each release.
-- **The `commit` field.** The draft uses the tag `v1.0.0`, which F-Droid's update
+- **The `commit` field.** The draft uses the tag `v1.0.1`, which F-Droid's update
   checker also writes for later versions. The reference docs prefer a full commit
-  hash, so a reviewer may ask for `git rev-parse v1.0.0` instead.
+  hash, so a reviewer may ask for `git rev-parse v1.0.1` instead.
 - **Project age.** F-Droid's inclusion policy expects an app to have been actively
   developed for about three months. TidyDial's history is younger than that, so
   reviewers may ask to wait or make an exception.
