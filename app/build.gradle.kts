@@ -17,11 +17,11 @@ private val releaseSigningEnv: Map<String, String>? = listOf(
     .takeIf { env -> env.values.all { it.isNotEmpty() } }
 
 android {
-    namespace = "org.tidydial"
+    namespace = "net.evopoint.tidydial"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "org.tidydial"
+        applicationId = "net.evopoint.tidydial"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

@@ -78,7 +78,7 @@ After a release, the same value is the `certificate SHA-256 digest` printed by
 the version the line starts with `Signer #1` or `V2 Signer:`).
 
 Put it in `.github/workflows/release.yml` (`EXPECTED_CERT_SHA256`) and
-`docs/fdroid/org.tidydial.yml` (`AllowedAPKSigningKeys`).
+`docs/fdroid/net.evopoint.tidydial.yml` (`AllowedAPKSigningKeys`).
 
 ### 3. Add the secrets to the `release` environment
 
@@ -143,8 +143,8 @@ gh variable set PLAY_RELEASE_STATUS --env release --body completed
 
 ### 6. F-Droid
 
-Submit `docs/fdroid/org.tidydial.yml` to [fdroiddata](https://gitlab.com/fdroid/fdroiddata)
-as `metadata/org.tidydial.yml`. Its `Binaries` entry points at the APK on the GitHub Release,
+Submit `docs/fdroid/net.evopoint.tidydial.yml` to [fdroiddata](https://gitlab.com/fdroid/fdroiddata)
+as `metadata/net.evopoint.tidydial.yml`. Its `Binaries` entry points at the APK on the GitHub Release,
 and `AllowedAPKSigningKeys` at our certificate.
 
 ## Reproducible builds
@@ -173,6 +173,6 @@ The Play feature graphic is rendered by `FeatureGraphicTest`. After changing it,
 copy it to the store metadata:
 
 ```sh
-./gradlew recordRoborazziDebug --tests 'org.tidydial.ui.components.FeatureGraphicTest'
+./gradlew recordRoborazziDebug --tests 'net.evopoint.tidydial.ui.components.FeatureGraphicTest'
 cp app/src/test/screenshots/feature_graphic.png fastlane/metadata/android/en-US/images/featureGraphic.png
 ```
