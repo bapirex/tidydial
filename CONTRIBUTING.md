@@ -22,7 +22,7 @@ a security problem, please do not open a public issue: see [SECURITY.md](SECURIT
 Requirements: JDK 21 and the Android SDK (compile SDK 37). Gradle is fetched by the wrapper.
 
 ```bash
-./gradlew assembleDebug          # build a debug APK (org.tidydial.debug)
+./gradlew assembleDebug          # build a debug APK (net.evopoint.tidydial.debug)
 ./gradlew testDebugUnitTest      # unit, Robolectric and screenshot tests
 ./gradlew lintDebug              # Android lint
 ./gradlew verifyRoborazziDebug   # compare UI against app/src/test/screenshots/
@@ -30,7 +30,7 @@ Requirements: JDK 21 and the Android SDK (compile SDK 37). Gradle is fetched by 
 ./gradlew assembleRelease        # minified release APK (unsigned)
 ```
 
-The debug build has the application ID `org.tidydial.debug`, so it can be installed next to a
+The debug build has the application ID `net.evopoint.tidydial.debug`, so it can be installed next to a
 release build. Test with a device or emulator whose contacts are fake: TidyDial edits the real
 contacts on the device it runs on.
 

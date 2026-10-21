@@ -1,8 +1,8 @@
 # F-Droid metadata
 
-`org.tidydial.yml` is a draft of the build recipe that F-Droid keeps in its
+`net.evopoint.tidydial.yml` is a draft of the build recipe that F-Droid keeps in its
 [fdroiddata](https://gitlab.com/fdroid/fdroiddata) repository, at
-`metadata/org.tidydial.yml`. F-Droid reads it to build TidyDial from source.
+`metadata/net.evopoint.tidydial.yml`. F-Droid reads it to build TidyDial from source.
 This copy is for reference: once the app is accepted, the copy in fdroiddata is
 the one F-Droid uses, and its bot updates that copy when we push new release tags.
 
@@ -34,7 +34,7 @@ wrapper, which already knows Gradle 9.8.2 and has the same checksum as
 1. Tag `v1.0.0` and let the release workflow publish `tidydial-1.0.0.apk` to
    the GitHub Release. The download URL must be exactly
    `https://github.com/bapirex/tidydial/releases/download/v1.0.0/tidydial-1.0.0.apk`.
-2. Check the two values in `org.tidydial.yml` that this repository cannot
+2. Check the two values in `net.evopoint.tidydial.yml` that this repository cannot
    derive, and fill them in if they are still placeholders:
    - `AuthorEmail`: the public contact address.
    - `AllowedAPKSigningKeys`: the SHA-256 of the release signing certificate,
@@ -71,17 +71,17 @@ wrapper, which already knows Gradle 9.8.2 and has the same checksum as
 ## Submitting
 
 1. Sign in to GitLab and fork <https://gitlab.com/fdroid/fdroiddata>.
-2. Clone your fork and create a branch named `org.tidydial`.
-3. Copy `org.tidydial.yml` to `metadata/org.tidydial.yml`.
+2. Clone your fork and create a branch named `net.evopoint.tidydial`.
+3. Copy `net.evopoint.tidydial.yml` to `metadata/net.evopoint.tidydial.yml`.
 4. Optionally, test it with fdroidserver (`pip install fdroidserver`, or the
    `registry.gitlab.com/fdroid/fdroidserver:buildserver` container for a full build):
 
    ```sh
    fdroid readmeta
-   fdroid rewritemeta org.tidydial    # must leave the file unchanged
-   fdroid lint org.tidydial
-   fdroid checkupdates --allow-dirty org.tidydial
-   fdroid build -v -l org.tidydial    # full build; needs the buildserver container
+   fdroid rewritemeta net.evopoint.tidydial    # must leave the file unchanged
+   fdroid lint net.evopoint.tidydial
+   fdroid checkupdates --allow-dirty net.evopoint.tidydial
+   fdroid build -v -l net.evopoint.tidydial    # full build; needs the buildserver container
    ```
 
 5. Commit with the message `New app: TidyDial`, push, and open a merge request
@@ -188,6 +188,6 @@ I am the author of the app.
   with Google. Enforcement began in a few countries from September 2026, with a
   wider rollout planned. F-Droid opposes the requirement. An APK that F-Droid
   signs with its own key could not be registered under our developer account.
-  Our developer-signed APK uses the same key as Play, so once `org.tidydial` and
+  Our developer-signed APK uses the same key as Play, so once `net.evopoint.tidydial` and
   that key's fingerprint are registered in the Play Console, the F-Droid APK is
   covered too.

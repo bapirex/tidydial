@@ -16,8 +16,8 @@
 
 <!--
   Store badges go here once the listings are live (follow each store's badge guidelines):
-  - Get it on F-Droid: https://f-droid.org/packages/org.tidydial/
-  - Get it on Google Play: https://play.google.com/store/apps/details?id=org.tidydial
+  - Get it on F-Droid: https://f-droid.org/packages/net.evopoint.tidydial/
+  - Get it on Google Play: https://play.google.com/store/apps/details?id=net.evopoint.tidydial
 -->
 
 TidyDial reads the phone numbers in your address book, shows you how each one would look in the
@@ -107,13 +107,13 @@ cd tidydial
 ./gradlew assembleRelease        # minified release APK (unsigned)
 ```
 
-The debug build has the application ID `org.tidydial.debug`, so it can be installed next to a
-release build (`org.tidydial`).
+The debug build has the application ID `net.evopoint.tidydial.debug`, so it can be installed next to a
+release build (`net.evopoint.tidydial`).
 
 ## Project structure
 
 ```text
-app/src/main/java/org/tidydial/
+app/src/main/java/net/evopoint/tidydial/
 ├── App.kt                    Application class and a small manual dependency container
 ├── data/
 │   ├── ContactsRepository.kt Reads phone rows, applies and restores changes in batches
