@@ -22,6 +22,11 @@ class AboutScreenshotTest {
     @Test
     fun about() = capture("about")
 
+    // Google Play phone screenshots: 9:16 (1233x2193 px), copied to fastlane phoneScreenshots.
+    @Test
+    @Config(qualifiers = "w411dp-h731dp-xxhdpi")
+    fun store() = capture("store_about")
+
     @Test
     @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")
     fun aboutDark() = capture("about_dark", darkTheme = true)
