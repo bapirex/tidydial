@@ -83,6 +83,21 @@ class ContactsScreenScreenshotTest {
         captureRoot("light")
     }
 
+    // Google Play phone screenshots: 9:16 (1233x2193 px), copied to fastlane phoneScreenshots.
+    @Test
+    @Config(qualifiers = "w411dp-h731dp-xxhdpi")
+    fun storeLight() {
+        setScreen(SampleData.uiState(canUndo = true))
+        captureRoot("store_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h731dp-night-xxhdpi")
+    fun storeDark() {
+        setScreen(dark = true)
+        captureRoot("store_dark")
+    }
+
     @Test
     @Config(qualifiers = "+night")
     fun dark() {

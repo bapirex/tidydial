@@ -44,6 +44,14 @@ class PermissionScreenScreenshotTest {
         capture("permission_light")
     }
 
+    // Google Play phone screenshots: 9:16 (1233x2193 px), copied to fastlane phoneScreenshots.
+    @Test
+    @Config(qualifiers = "w411dp-h731dp-xxhdpi")
+    fun store() {
+        show()
+        capture("store_permission")
+    }
+
     @Test
     @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")
     fun dark() {

@@ -27,6 +27,11 @@ class FormatOptionsScreenshotTest {
     @Test
     fun formatOptions() = capture("format_options")
 
+    // Google Play phone screenshots: 9:16 (1233x2193 px), copied to fastlane phoneScreenshots.
+    @Test
+    @Config(qualifiers = "w411dp-h731dp-xxhdpi")
+    fun store() = capture("store_format_options")
+
     @Test
     @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
     fun formatOptionsFull() = capture("format_options_full")
