@@ -1,0 +1,4 @@
+* Call any number from TidyDial: open your phone app, or call through WhatsApp, Signal, Telegram, Google Meet and other apps that offer it
+* Numbers already grouped with spaces are no longer reshuffled
+* Toll-free and other domestic-only numbers no longer get a country code, which stopped them connecting
+* National format keeps the country code where calls need it (Brazil, Mexico, Chile, Uzbekistan) and keeps Brazilian carrier codes
