@@ -73,8 +73,13 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
   added a voice or video call for that number to the contact, a sheet asks which way to call; a
   single way starts right away. Most messaging apps only accept calls from apps that may make
   phone calls, so the setup screen asks for that permission too, marked optional, and TidyDial
-  asks again only when you call through such an app without having granted it. If you decline,
-  it opens your chat with the contact in that app instead, when it has one.
+  asks again only when you call through such an app without having granted it (or when you allow
+  it in Format options). If you decline, it opens your chat with the contact in that app instead,
+  when it has one.
+- **Permissions at a glance.** Format options show whether contacts access and the call
+  permission are allowed, and ask again, or open Android settings once Android no longer asks,
+  if one was declined or turned off. Where Android removes the permissions of apps left unused
+  for months, they also link to the setting that turns this off for TidyDial.
 - **Only valid numbers are rewritten.** Numbers libphonenumber cannot recognize are flagged as
   invalid and left as they are.
 - **Material You and Material 3 Expressive.** Built with Jetpack Compose and Material 3
@@ -91,7 +96,7 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 | **Stored by the app** | Your format settings, your backup choice and a journal of the last update (for undo). |
 | **Android backup** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). The backup choice is excluded from cloud backup and device transfer. |
 | **Backup files** | Optional. Stored only in the folder you pick, never in TidyDial's Android backup, and TidyDial never sends them anywhere. If you pick a cloud storage app's folder, that app syncs the files. They hold names and numbers, and stay after uninstalling. |
-| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`), required. Make phone calls (`CALL_PHONE`), optional: asked for during setup, and again only if you choose to call through another app such as WhatsApp without having granted it; regular calls open your phone app. |
+| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`), required. Make phone calls (`CALL_PHONE`), optional: asked for during setup, and again only if you choose to call through another app such as WhatsApp without having granted it, or allow it in Format options; regular calls open your phone app. |
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 

@@ -1,9 +1,5 @@
 package net.evopoint.tidydial.ui
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.evopoint.tidydial.ui.contacts.ContactsScreen
 import net.evopoint.tidydial.ui.permission.PermissionScreen
 import net.evopoint.tidydial.ui.permission.hasContactsPermission
+import net.evopoint.tidydial.ui.permission.openAppSettings
 import net.evopoint.tidydial.ui.permission.rememberPermissionRequest
 
 private enum class Route { Blank, Permission, Contacts }
@@ -82,12 +79,4 @@ fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
     }
-}
-
-private fun Context.openAppSettings() {
-    val intent = Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.fromParts("package", packageName, null),
-    )
-    startActivity(intent)
 }

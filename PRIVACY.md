@@ -19,14 +19,15 @@ folder you pick.
 | :--- | :--- |
 | **Contacts (read)** | To list the phone numbers in your contacts, with each contact's name and the account that stores the number, and to show how each number would look in the format you choose. When you tap a number's call button, TidyDial also reads the call and chat entries other apps (such as WhatsApp or Signal) added to that contact, to offer calling through them. |
 | **Contacts (write)** | To save the new format for the numbers you select and confirm, to restore the old numbers when you tap Undo, and to restore numbers from a backup file you pick. Only the phone number field is changed. |
-| **Make phone calls** (optional) | So that calls through another app such as WhatsApp, Signal, Telegram or Google Meet can start from TidyDial, because those apps only accept calls from apps that hold this permission. TidyDial never places a call itself: regular calls open your phone app with the number filled in. Asked for during setup, together with contacts access, and again only if you pick such a call without having granted it. If you decline, TidyDial works as before, and calling through such an app opens your chat with the contact in that app instead, when it has one. |
+| **Make phone calls** (optional) | So that calls through another app such as WhatsApp, Signal, Telegram or Google Meet can start from TidyDial, because those apps only accept calls from apps that hold this permission. TidyDial never places a call itself: regular calls open your phone app with the number filled in. Asked for during setup, together with contacts access, and again only if you pick such a call without having granted it, or tap Allow in Format options. If you decline, TidyDial works as before, and calling through such an app opens your chat with the contact in that app instead, when it has one. |
 | **Apps that can make calls (package visibility)** | To find whether your phone app and the apps that added a call to a contact can start that call or open your chat, and to show the name and icon of each app you can call with. TidyDial only sees apps that can open a phone number or a contact entry, not every installed app. This is checked on your device when you tap call, and the list of apps is never stored or sent anywhere. |
 | **SIM and network country** | To suggest your country, so that numbers without a country code are read correctly. Only the two-letter country code is read. No phone number, SIM serial or other identifier is read. |
 
 TidyDial asks for contacts access only after a setup screen explains what it does. The same
 screen offers the optional call permission. If you did not grant it there, or set up TidyDial
-before it asked, it is asked for only when you choose to call through an app that needs it. You
-can revoke either at any time in Android Settings.
+before it asked, it is asked for only when you choose to call through an app that needs it, or
+when you allow it under Permissions in Format options. You can revoke either at any time in
+Android Settings.
 
 ## What TidyDial stores on your device
 

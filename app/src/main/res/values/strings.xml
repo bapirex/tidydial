@@ -322,6 +322,28 @@
     <string name="options_backups_restore">Restore from a backup…</string>
     <string name="options_backups_restore_summary">Bring back numbers from a backup file</string>
 
+    <string name="options_section_permissions">Permissions</string>
+    <string name="options_permissions_summary">Allow a permission you declined, or that Android turned off. Changes here are saved right away, without Apply.</string>
+    <string name="options_permission_allowed">Allowed</string>
+    <string name="options_permission_not_allowed">Not allowed</string>
+    <!-- Shows the system permission dialog again. -->
+    <string name="options_permission_allow">Allow</string>
+    <!-- Spoken by screen readers for the rows: "Double-tap to allow contacts access". -->
+    <string name="options_permissions_allow_contacts_action">Allow contacts access</string>
+    <string name="options_permissions_allow_calls_action">Allow phone calls</string>
+    <!-- The system no longer shows the dialog, so the row opens TidyDial's page in the system settings. -->
+    <string name="options_permissions_contacts_settings_action">Allow contacts access in settings</string>
+    <string name="options_permissions_calls_settings_action">Allow phone calls in settings</string>
+    <!-- Under "Not allowed" once the system refuses to show its dialog, for example right after tapping Allow. -->
+    <string name="options_permission_permanently_denied">Android won’t ask again. Allow it in settings.</string>
+    <!-- Android removes the permissions of apps that were not opened for a few months (Android 11 and later; on Android 8 to 10 through Google Play). -->
+    <string name="options_permissions_unused">Remove permissions if unused</string>
+    <string name="options_permissions_unused_on">Android may remove permissions if you don’t use TidyDial for a few months</string>
+    <string name="options_permissions_unused_off">Turned off</string>
+    <!-- Opens the system page where this is turned off ("Pause app activity if unused" on Android 12 and later). -->
+    <string name="options_permissions_unused_turn_off">Turn off</string>
+    <string name="options_permissions_unused_turn_off_action">Turn off in system settings</string>
+
     <!-- Country picker -->
     <string name="country_picker_title">Choose country</string>
     <string name="country_picker_search_hint">Search by name or code</string>

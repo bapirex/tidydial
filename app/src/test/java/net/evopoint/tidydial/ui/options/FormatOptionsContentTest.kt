@@ -27,6 +27,10 @@ import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
 import net.evopoint.tidydial.ui.BackupError
 import net.evopoint.tidydial.ui.BackupUi
+import net.evopoint.tidydial.ui.permission.AccessState
+import net.evopoint.tidydial.ui.permission.PermissionAction
+import net.evopoint.tidydial.ui.permission.PermissionsUi
+import net.evopoint.tidydial.ui.permission.UnusedAppRestrictions
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
@@ -48,6 +52,8 @@ class FormatOptionsContentTest {
     private val backupToggles = mutableListOf<Boolean>()
     private var folderClicks = 0
     private var restoreClicks = 0
+    private var permissions by mutableStateOf(PermissionsUi())
+    private val permissionActions = mutableListOf<PermissionAction>()
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
 
@@ -65,6 +71,8 @@ class FormatOptionsContentTest {
                     onBackupEnabledChange = { backupToggles += it },
                     onChooseBackupFolder = { folderClicks++ },
                     onRestoreBackup = { restoreClicks++ },
+                    permissions = permissions,
+                    onPermissionAction = { permissionActions += it },
                     onPickCountry = { pickCountryClicks++ },
                     onApply = {},
                     onCancel = {},
@@ -185,10 +193,35 @@ class FormatOptionsContentTest {
     fun backupSettingsSayTheyAreSavedRightAwayAndShowErrors() {
         backup = BackupUi(enabled = true, folderName = "TidyDial backups", error = BackupError.SAVE_FAILED)
         setContent()
-        composeRule.onNodeWithText("Changes here are saved right away", substring = true).performScrollTo()
+        composeRule.onNode(
+            hasText("TidyDial saves the old and new numbers", substring = true) and
+                hasText("Changes here are saved right away", substring = true),
+        ).performScrollTo()
         composeRule.onNodeWithText("Couldn’t save your backup choice. Try again.").performScrollTo().assertExists()
         backup = backup.copy(error = BackupError.NO_PICKER)
         composeRule.onNodeWithText("No app found to pick a folder").assertExists()
+    }
+
+    @Test
+    fun permissionsSayTheyAreSavedRightAwayAndReportTheirRows() {
+        permissions = PermissionsUi(calls = AccessState.Denied, unusedAppRestrictions = UnusedAppRestrictions.On)
+        setContent()
+        composeRule.onNodeWithText("Permissions").performScrollTo()
+        // Worded like the Backups section, which follows the same rule.
+        composeRule.onNode(
+            hasText("Allow a permission you declined", substring = true) and
+                hasText("Changes here are saved right away, without Apply.", substring = true),
+        ).performScrollTo()
+
+        composeRule.onNodeWithText("Allow").performScrollTo().performClick()
+        composeRule.onNodeWithText("Turn off").performScrollTo().performClick()
+
+        assertEquals(
+            listOf(PermissionAction.AllowCalls, PermissionAction.ManageUnusedAppRestrictions),
+            permissionActions,
+        )
+        // Permissions are not part of the draft: nothing to apply.
+        assertEquals(SampleData.config, draft)
     }
 
     @Test

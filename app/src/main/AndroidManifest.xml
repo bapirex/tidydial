@@ -4,9 +4,9 @@
 
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
-    <!-- Optional: asked for during setup and again only when the user picks a call through an
-         app that requires it (WhatsApp, Signal, Telegram…) without having granted it. Regular
-         calls open the dialer and never need it. -->
+    <!-- Optional: asked for during setup, from the Permissions section of the format options,
+         and when the user picks a call through an app that requires it (WhatsApp, Signal,
+         Telegram…) without having granted it. Regular calls open the dialer and never need it. -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <!-- CALL_PHONE implies telephony; keep the app available on tablets without it. -->

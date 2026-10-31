@@ -3,7 +3,10 @@ package net.evopoint.tidydial.ui.permission
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,7 +48,9 @@ internal fun rememberPermissionRequest(onResult: (UiAction.PermissionResult) -> 
     ) { result ->
         if (result[Manifest.permission.CALL_PHONE] == false) callRefused = true
         val granted = ContactPermissions.all { result[it] == true || context.hasPermission(it) }
-        currentOnResult(UiAction.PermissionResult(granted = granted, canAskAgain = activity.canAskAgain()))
+        currentOnResult(
+            UiAction.PermissionResult(granted = granted, canAskAgain = activity.canAskAgain(ContactPermissions)),
+        )
     }
     return {
         val askForCalls = !callRefused && !context.hasPermission(Manifest.permission.CALL_PHONE)
@@ -53,6 +58,15 @@ internal fun rememberPermissionRequest(onResult: (UiAction.PermissionResult) -> 
     }
 }
 
-/** After a denial, the system only shows the contacts dialog again while a rationale is expected. */
-private fun Activity?.canAskAgain(): Boolean =
-    this == null || ContactPermissions.any { shouldShowRequestPermissionRationale(it) }
+/** After a denial, the system only shows the dialog again while a rationale is expected. */
+internal fun Activity?.canAskAgain(permissions: Array<String>): Boolean =
+    this == null || permissions.any { shouldShowRequestPermissionRationale(it) }
+
+/** The app's page in the system settings, where permissions refused for good can be granted. */
+internal fun Context.openAppSettings() {
+    val intent = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", packageName, null),
+    )
+    startActivity(intent)
+}
