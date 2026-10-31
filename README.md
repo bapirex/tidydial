@@ -50,6 +50,15 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
   TidyDial read. A number edited somewhere else in the meantime is skipped, not overwritten.
 - **Undo.** The last update can be undone from the snackbar or the menu, even after the app
   restarts. A number you have edited again since the update is kept, not reverted.
+- **Backups that outlive the app.** On the first update TidyDial offers to keep backups in a
+  folder you pick (Documents, a folder inside Downloads, or a cloud storage app's folder if it
+  offers one) through Android's file picker, which needs no permission. Before each update it
+  saves a readable JSON file with the old and new numbers, and the first backup in a folder comes
+  with a snapshot of every number as it was when the snapshot was taken. An update does not start
+  if its backup cannot be written, unless you choose to run it without one. *Restore from a
+  backup…* in Format options works even after reinstalling, with the same safety rules: only
+  numbers that still look as the update left them are restored (for a snapshot, only the
+  formatting is reverted), and the restore itself can be undone (and, with backups on, is backed up first).
 - **Account skipping.** Numbers are labeled by the account that stores them (Google, device, SIM
   card and so on). Accounts that messaging apps sync (WhatsApp, Telegram, Signal, Viber, Threema,
   Skype, Facebook) are skipped by default, because those apps overwrite edits with their own
@@ -77,9 +86,10 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 | :--- | :--- |
 | **Internet access** | None. `INTERNET` and `ACCESS_NETWORK_STATE` are removed from the merged manifest, even if a library asks for them. |
 | **Ads, trackers, analytics** | None. No proprietary SDKs, no telemetry, no crash reporting. |
-| **Where your data goes** | Nowhere. Contacts are read and edited in place through Android's contacts provider and never leave the device. |
-| **Stored by the app** | Your format settings and a journal of the last update (for undo). |
-| **Backups** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). |
+| **Where your data goes** | Nowhere, except backup files you choose to save. Contacts are read and edited in place through Android's contacts provider, and TidyDial never sends them anywhere. |
+| **Stored by the app** | Your format settings, your backup choice and a journal of the last update (for undo). |
+| **Android backup** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). The backup choice is excluded from cloud backup and device transfer. |
+| **Backup files** | Optional. Stored only in the folder you pick, never in TidyDial's Android backup, and TidyDial never sends them anywhere. If you pick a cloud storage app's folder, that app syncs the files. They hold names and numbers, and stay after uninstalling. |
 | **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`). Make phone calls (`CALL_PHONE`) is only requested when you choose to call through another app such as WhatsApp; regular calls open your phone app. |
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
@@ -122,6 +132,8 @@ release build (`net.evopoint.tidydial`).
 app/src/main/java/net/evopoint/tidydial/
 ├── App.kt                    Application class and a small manual dependency container
 ├── data/
+│   ├── BackupFormat.kt, BackupStore.kt Backup file format and the folder it goes to (Storage Access Framework)
+│   ├── BackupManager.kt, RestorePlanner.kt Backups before updates; matching and safety rules for restores
 │   ├── ContactsRepository.kt Reads phone rows, applies and restores changes in batches
 │   ├── PhoneNumberFormatter.kt libphonenumber wrapper (formats, extensions, short numbers)
 │   ├── CallRows.kt, CallIntents.kt Call actions other apps add to a contact, and call intents
@@ -132,6 +144,7 @@ app/src/main/java/net/evopoint/tidydial/
 └── ui/
     ├── MainActivity.kt, MainViewModel.kt, TidyDialApp.kt, UiState.kt
     ├── permission/           Contacts permission explainer
+    ├── backup/               Backup prompt, backup failure and restore confirmation
     ├── contacts/             Contact list, filters, toolbar, confirm, progress and call sheets
     ├── options/              Format options and country picker sheets
     ├── about/                About sheet with licenses

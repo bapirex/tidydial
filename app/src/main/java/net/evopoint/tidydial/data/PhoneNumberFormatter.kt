@@ -120,6 +120,31 @@ class PhoneNumberFormatter(
         return digitsA.isNotEmpty() && digitsA == mainB.filter { it.isDigit() }
     }
 
+    /**
+     * [isSameNumber] that also requires the same extension and dial-sequence digits, so switching
+     * between ";12", ",12" and " ext. 12" counts as formatting, but "…;12" and "…;34" do not
+     * match. Used to revert only the formatting of a number, never the number itself.
+     */
+    fun isSameDialledNumber(a: String, b: String, regionIso: String): Boolean {
+        val region = regionIso.uppercase(Locale.ROOT)
+        return isSameNumber(a, b, region) && dialledTail(a, region) == dialledTail(b, region)
+    }
+
+    /** The extension followed by the dialled characters (digits, `*`, `#`) of the dial sequence. */
+    private fun dialledTail(number: String, region: String): String {
+        val split = splitDialSequence(number.trim())
+        val extension = if (split.main.isEmpty()) {
+            ""
+        } else {
+            try {
+                phoneUtil.parse(split.main, region).extension
+            } catch (e: NumberParseException) {
+                ""
+            }
+        }
+        return extension + split.rest.filter { it.isDigit() || it == '*' || it == '#' }
+    }
+
     private fun parseWithoutExtension(number: String, region: String): PhoneNumber? {
         if (number.isEmpty()) return null
         return try {

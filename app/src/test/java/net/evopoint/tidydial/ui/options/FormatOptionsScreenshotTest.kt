@@ -9,6 +9,7 @@ import net.evopoint.tidydial.data.PhoneNumberFormatter
 import net.evopoint.tidydial.model.ExtensionDelimiter
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
+import net.evopoint.tidydial.ui.BackupUi
 import net.evopoint.tidydial.ui.preview.SampleData
 import org.junit.Rule
 import org.junit.Test
@@ -33,16 +34,30 @@ class FormatOptionsScreenshotTest {
     fun store() = capture("store_format_options")
 
     @Test
-    @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2100dp-xxhdpi")
     fun formatOptionsFull() = capture("format_options_full")
 
     @Test
-    @Config(qualifiers = "w411dp-h1900dp-night-xxhdpi")
+    @Config(qualifiers = "w411dp-h2100dp-night-xxhdpi")
     fun formatOptionsFullDark() = capture("format_options_full_dark", darkTheme = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2900dp-xxhdpi")
     fun formatOptionsFullFontScale() = capture("format_options_full_font_1_5", fontScale = 1.5f)
+
+    /** Backups were never set up: no folder row. */
+    @Test
+    @Config(qualifiers = "w411dp-h2100dp-xxhdpi")
+    fun formatOptionsBackupsNone() = capture("format_options_backups_none", backup = BackupUi())
+
+    /** Access to the backup folder was removed. */
+    @Test
+    @Config(qualifiers = "w411dp-h2100dp-night-xxhdpi")
+    fun formatOptionsBackupsUnavailable() = capture(
+        name = "format_options_backups_unavailable",
+        darkTheme = true,
+        backup = SampleData.backupUi.copy(folderAvailable = false),
+    )
 
     @Test
     @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
@@ -65,17 +80,18 @@ class FormatOptionsScreenshotTest {
         fontScale: Float = 1f,
         config: FormatConfig = SampleData.config,
         withAccounts: Boolean = true,
+        backup: BackupUi = SampleData.backupUi,
     ) {
         composeRule.setContent {
             SheetFrame(darkTheme = darkTheme, fontScale = fontScale) {
-                Content(config, withAccounts)
+                Content(config, withAccounts, backup)
             }
         }
         composeRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/$name.png")
     }
 
     @Composable
-    private fun Content(config: FormatConfig, withAccounts: Boolean) {
+    private fun Content(config: FormatConfig, withAccounts: Boolean, backup: BackupUi) {
         FormatOptionsContent(
             draft = config,
             onDraftChange = {},
@@ -83,6 +99,10 @@ class FormatOptionsScreenshotTest {
             detectedCountryIso = "US",
             accounts = if (withAccounts) SampleData.accounts else emptyList(),
             exampleNumber = formatter::exampleNumber,
+            backup = backup,
+            onBackupEnabledChange = {},
+            onChooseBackupFolder = {},
+            onRestoreBackup = {},
             onPickCountry = {},
             onApply = {},
             onCancel = {},

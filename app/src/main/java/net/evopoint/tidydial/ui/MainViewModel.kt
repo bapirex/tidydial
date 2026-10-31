@@ -29,11 +29,15 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.evopoint.tidydial.App
+import net.evopoint.tidydial.data.BackupFailure
+import net.evopoint.tidydial.data.BackupManager
+import net.evopoint.tidydial.data.BackupStore
 import net.evopoint.tidydial.data.ContactsDataSource
 import net.evopoint.tidydial.data.CountryCatalog
 import net.evopoint.tidydial.data.JournalEntry
 import net.evopoint.tidydial.data.LoadResult
 import net.evopoint.tidydial.data.PhoneNumberFormatter
+import net.evopoint.tidydial.data.RestorePlan
 import net.evopoint.tidydial.data.SettingsRepository
 import net.evopoint.tidydial.data.UndoJournal
 import net.evopoint.tidydial.data.UpdateResult
@@ -54,6 +58,8 @@ class MainViewModel(
     private val undoJournal: UndoJournal,
     private val countryCatalog: CountryCatalog,
     private val formatter: PhoneNumberFormatter,
+    private val backupStore: BackupStore,
+    private val backups: BackupManager,
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
@@ -77,7 +83,29 @@ class MainViewModel(
         val detectedCountryIso: String = SettingsRepository.FALLBACK_COUNTRY,
         val countries: List<Country> = emptyList(),
         val call: CallRequest? = null,
+        val backup: BackupUi = BackupUi(),
+        val backupDialog: BackupDialog? = null,
+        val restore: RestoreConfirmation? = null,
     )
+
+    /** How an update, undo or restore ended; null in [runUpdate] when the journal was not saved. */
+    private sealed interface RunResult {
+        /**
+         * [changedBefore] and [notFound]: restore entries left alone before writing.
+         * [backupFailed]: the backup before a restore could not be written.
+         */
+        data class Done(
+            val result: UpdateResult,
+            val changedBefore: Int = 0,
+            val notFound: Int = 0,
+            val backupFailed: Boolean = false,
+        ) : RunResult
+
+        /** The backup could not be saved first, so nothing was written. */
+        data class BackupFailed(val failure: BackupFailure) : RunResult
+
+        data object PermissionLost : RunResult
+    }
 
     private class Display(val groups: List<ContactGroup>, val counts: EntryCounts)
 
@@ -103,6 +131,10 @@ class MainViewModel(
     private var loadJob: Job? = null
     private var updateJob: Job? = null
     private var callJob: Job? = null
+    private var restoreJob: Job? = null
+
+    /** What [UiState.restore] would write once confirmed. */
+    private var pendingRestore: RestorePlan? = null
 
     @OptIn(FlowPreview::class)
     private val display: Flow<Display> = combine(
@@ -153,6 +185,9 @@ class MainViewModel(
             progress = status.progress,
             canUndo = status.canUndo,
             call = status.call,
+            backup = status.backup,
+            backupDialog = status.backupDialog,
+            restore = status.restore,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), UiState())
 
@@ -165,6 +200,20 @@ class MainViewModel(
             val detected = settings.detectedCountryIso
             val countries = countryCatalog.countries(Locale.getDefault())
             status.update { it.copy(detectedCountryIso = detected, countries = countries) }
+        }
+        viewModelScope.launch {
+            settings.backup.collect { prefs ->
+                val available = prefs.folderUri?.let { backupStore.hasAccess(it) } ?: true
+                status.update {
+                    it.copy(
+                        backup = it.backup.copy(
+                            enabled = prefs.enabled,
+                            folderName = prefs.folderName,
+                            folderAvailable = available,
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -205,6 +254,28 @@ class MainViewModel(
             }
             // The UI opens the settings itself.
             UiAction.OpenAppSettings -> Unit
+            is UiAction.BackupFolderChosen -> onBackupFolderChosen(action.uri)
+            UiAction.ContinueWithoutBackup -> continueWithoutBackup()
+            UiAction.UpdateWithoutBackup -> {
+                status.update { it.copy(backupDialog = null, backup = it.backup.copy(error = null)) }
+                applySelected(skipBackup = true)
+            }
+
+            UiAction.DismissBackupDialog -> status.update {
+                it.copy(backupDialog = null, backup = it.backup.copy(error = null))
+            }
+
+            is UiAction.SetBackupEnabled -> setBackupEnabled(action.enabled)
+            UiAction.DismissBackupError -> setBackupError(null)
+            is UiAction.RestoreFileChosen -> prepareRestore(action.uri)
+            UiAction.ConfirmRestore -> confirmRestore()
+            UiAction.DismissRestore -> {
+                pendingRestore = null
+                status.update { it.copy(restore = null) }
+            }
+
+            UiAction.FolderPickerUnavailable -> setBackupError(BackupError.NO_PICKER)
+            UiAction.FilePickerUnavailable -> eventChannel.trySend(UiEvent.NoFilePicker)
         }
     }
 
@@ -306,7 +377,8 @@ class MainViewModel(
 
     // region Update and undo
 
-    private fun applySelected() {
+    /** [skipBackup]: the user chose to run this update without the backup that failed. */
+    private fun applySelected(skipBackup: Boolean = false) {
         if (updateJob?.isActive == true) return
         val data = loaded.value ?: return
         val selected = selection.value
@@ -317,18 +389,27 @@ class MainViewModel(
             .distinctBy { it.dataId }
             .map { JournalEntry(it.dataId, before = it.originalNumber, after = it.formattedNumber) }
         updateJob = viewModelScope.launch {
+            val backup = settings.backup.first()
+            if (!backup.asked) {
+                // The first update waits for a backup choice; nothing is written yet.
+                status.update { it.copy(backupDialog = BackupDialog.FirstUpdate) }
+                return@launch
+            }
             runUpdate(ProgressKind.APPLY, entries.size) {
-                val previous = undoJournal.load()
-                // Write-ahead: the journal is on disk before any contact changes, so a crash or a
-                // killed process mid-run can still be undone. Undo skips rows that were not written.
-                if (!saveJournal(planned)) return@runUpdate null
-                val result = contacts.apply(entries) { done, total -> reportProgress(done, total) }
-                // Keep what was written plus rows that failed after a partial batch commit; if
-                // nothing could have changed, the previous update stays undoable.
-                val written = result.journal.mapTo(HashSet()) { it.dataId } + result.failedIds
-                val keep = planned.filter { it.dataId in written }
-                saveJournal(keep.ifEmpty { previous })
-                result
+                if (backup.enabled && !skipBackup) {
+                    // Write-ahead, like the journal: the backup is in the user's folder before
+                    // any contact changes, and a backup that cannot be written stops the update.
+                    setBackingUp(true)
+                    val country = settings.config.first().countryIso
+                    when (val outcome = backups.backUpBeforeUpdate(entries, country)) {
+                        is BackupManager.WriteOutcome.Failed -> return@runUpdate RunResult.BackupFailed(outcome.failure)
+                        BackupManager.WriteOutcome.PermissionDenied -> return@runUpdate RunResult.PermissionLost
+                        else -> setBackingUp(false)
+                    }
+                }
+                journaledWrite(planned) {
+                    contacts.apply(entries) { done, total -> reportProgress(done, total) }
+                }
             }
         }
     }
@@ -341,15 +422,36 @@ class MainViewModel(
                 status.update { it.copy(canUndo = false) }
                 return@launch
             }
+            // Undo never needs a backup: it must work when the backup folder is gone.
             runUpdate(ProgressKind.UNDO, journal.size) {
                 val result = contacts.restore(journal) { done, total -> reportProgress(done, total) }
                 // Keep what failed or was never attempted so the user can retry. Skipped rows were
                 // edited since the update and would be skipped again, so they are dropped.
                 val done = result.journal.mapTo(HashSet()) { it.dataId } + result.skippedIds
                 saveJournal(journal.filter { it.dataId !in done })
-                result
+                RunResult.Done(result)
             }
         }
+    }
+
+    /**
+     * Saves [planned] as the journal, runs [write] and shrinks the journal to what was written.
+     * Write-ahead: the journal is on disk before any contact changes, so a crash or a killed
+     * process mid-run can still be undone. Undo skips rows that were not written.
+     */
+    private suspend fun journaledWrite(
+        planned: List<JournalEntry>,
+        write: suspend () -> UpdateResult,
+    ): RunResult.Done? {
+        val previous = undoJournal.load()
+        if (!saveJournal(planned)) return null
+        val result = write()
+        // Keep what was written plus rows that failed after a partial batch commit; if nothing
+        // could have changed, the previous update stays undoable.
+        val written = result.journal.mapTo(HashSet()) { it.dataId } + result.failedIds
+        val keep = planned.filter { it.dataId in written }
+        saveJournal(keep.ifEmpty { previous })
+        return RunResult.Done(result)
     }
 
     /** Saves (or, for an empty list, clears) the journal; false when the file could not be written. */
@@ -362,39 +464,217 @@ class MainViewModel(
     }
 
     /**
-     * Runs [block] (write + journal bookkeeping) to completion even if the ViewModel is cleared,
-     * so the journal on disk always matches what was written. Then reports and reloads. A null
-     * result means nothing was written because the journal could not be saved first.
+     * Runs [block] (backup, write and journal bookkeeping) to completion even if the ViewModel is
+     * cleared, so the journal on disk always matches what was written. Then reports and reloads.
+     * A null result means nothing was written because the journal could not be saved first.
      */
-    private suspend fun runUpdate(kind: ProgressKind, total: Int, block: suspend () -> UpdateResult?) {
+    private suspend fun runUpdate(kind: ProgressKind, total: Int, block: suspend () -> RunResult?) {
         loadJob?.cancel()
         status.update {
             it.copy(progress = UpdateProgress(0, total, kind), isLoading = false, isRefreshing = false)
         }
-        val result = try {
+        val outcome = try {
             withContext(NonCancellable) { block() }
         } finally {
             status.update { it.copy(progress = null) }
         }
         val canUndo = undoJournal.load().isNotEmpty()
         status.update { it.copy(canUndo = canUndo) }
-        if (result == null) {
-            eventChannel.trySend(UiEvent.JournalSaveFailed)
-            return
+        when (outcome) {
+            null -> eventChannel.trySend(UiEvent.JournalSaveFailed)
+            RunResult.PermissionLost -> onPermissionLost()
+            is RunResult.BackupFailed -> {
+                Log.w(TAG, "Backup failed (${outcome.failure}), the update did not start")
+                if (outcome.failure == BackupFailure.READ_CONTACTS_FAILED) {
+                    // Not the folder's fault: choosing it again would not help.
+                    eventChannel.trySend(UiEvent.BackupReadFailed)
+                } else {
+                    refreshBackupAccess()
+                    status.update { it.copy(backupDialog = BackupDialog.WriteFailed(it.backup.folderName)) }
+                }
+            }
+
+            is RunResult.Done -> {
+                val result = outcome.result
+                eventChannel.trySend(
+                    when (kind) {
+                        ProgressKind.APPLY -> UiEvent.Updated(result.updated, result.skippedChanged, result.failed)
+                        ProgressKind.UNDO -> UiEvent.Undone(result.updated, result.skippedChanged, result.failed)
+                        ProgressKind.RESTORE -> UiEvent.RestoredFromBackup(
+                            restored = result.updated,
+                            skippedChanged = result.skippedChanged + outcome.changedBefore,
+                            notFound = outcome.notFound,
+                            failed = result.failed,
+                            backupFailed = outcome.backupFailed,
+                        )
+                    },
+                )
+                if (result.permissionRevoked) onPermissionLost() else load()
+            }
         }
-        eventChannel.trySend(
-            when (kind) {
-                ProgressKind.APPLY -> UiEvent.Updated(result.updated, result.skippedChanged, result.failed)
-                ProgressKind.UNDO -> UiEvent.Undone(result.updated, result.skippedChanged, result.failed)
-            },
-        )
-        if (result.permissionRevoked) onPermissionLost() else load()
+    }
+
+    private fun setBackingUp(backingUp: Boolean) {
+        status.update { current ->
+            val progress = current.progress ?: return@update current
+            current.copy(progress = progress.copy(isBackingUp = backingUp))
+        }
     }
 
     private fun reportProgress(done: Int, total: Int) {
         status.update { current ->
             val progress = current.progress ?: return@update current
             current.copy(progress = progress.copy(done = done, total = total))
+        }
+    }
+
+    // endregion
+
+    // region Backups
+
+    /**
+     * Keeps access to the picked folder and turns backups on. An update held by the backup prompt
+     * or a failed backup continues with it.
+     */
+    private fun onBackupFolderChosen(uri: String?) {
+        // Cancelled: a prompt or dialog stays open for another choice.
+        if (uri == null) return
+        setBackupError(null)
+        viewModelScope.launch {
+            val folder = backupStore.adoptFolder(uri)
+            if (folder == null) {
+                setBackupError(BackupError.FOLDER_FAILED)
+                return@launch
+            }
+            val previous = settings.backup.first().folderUri
+            try {
+                settings.setBackupFolder(folder.uri, folder.name)
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not save the backup folder", e)
+                if (folder.uri != previous) backupStore.releaseFolder(folder.uri)
+                setBackupError(BackupError.SAVE_FAILED)
+                return@launch
+            }
+            // Android caps the grants an app may keep, so the old folder's is given back.
+            if (previous != null && previous != folder.uri) backupStore.releaseFolder(previous)
+            refreshBackupAccess()
+            if (status.value.backupDialog != null) {
+                status.update { it.copy(backupDialog = null) }
+                // The dialog is modal, so the selection is still the one the user confirmed.
+                applySelected()
+            }
+        }
+    }
+
+    private fun continueWithoutBackup() {
+        setBackupError(null)
+        viewModelScope.launch {
+            try {
+                settings.setBackupEnabled(false)
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not save the backup choice", e)
+                // The prompt stays open and shows why.
+                setBackupError(BackupError.SAVE_FAILED)
+                return@launch
+            }
+            status.update { it.copy(backupDialog = null) }
+            applySelected()
+        }
+    }
+
+    private fun setBackupEnabled(enabled: Boolean) {
+        setBackupError(null)
+        viewModelScope.launch {
+            // Turning backups on needs a folder; the UI opens the picker instead.
+            if (enabled && settings.backup.first().folderUri == null) return@launch
+            try {
+                settings.setBackupEnabled(enabled)
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not save the backup choice", e)
+                setBackupError(BackupError.SAVE_FAILED)
+            }
+        }
+    }
+
+    private fun setBackupError(error: BackupError?) {
+        status.update { it.copy(backup = it.backup.copy(error = error)) }
+    }
+
+    private fun refreshBackupAccess() {
+        viewModelScope.launch {
+            val uri = settings.backup.first().folderUri ?: return@launch
+            val available = backupStore.hasAccess(uri)
+            status.update { it.copy(backup = it.backup.copy(folderAvailable = available)) }
+        }
+    }
+
+    /** Reads and plans a restore from the backup the user picked, then asks to confirm it. */
+    private fun prepareRestore(uri: String) {
+        if (updateJob?.isActive == true || restoreJob?.isActive == true) return
+        restoreJob = viewModelScope.launch {
+            val country = settings.config.first().countryIso
+            when (val outcome = backups.prepareRestore(uri, country)) {
+                is BackupManager.RestoreOutcome.Invalid -> eventChannel.trySend(UiEvent.BackupUnreadable(outcome.error))
+                BackupManager.RestoreOutcome.ContactsFailed -> eventChannel.trySend(UiEvent.LoadFailed)
+                BackupManager.RestoreOutcome.PermissionDenied -> onPermissionLost()
+                is BackupManager.RestoreOutcome.Ready -> {
+                    val plan = outcome.plan
+                    if (plan.changes.isEmpty()) {
+                        eventChannel.trySend(
+                            UiEvent.NothingToRestore(plan.alreadyRestored, plan.changedSince, plan.notFound),
+                        )
+                        return@launch
+                    }
+                    pendingRestore = plan
+                    status.update {
+                        it.copy(
+                            restore = RestoreConfirmation(
+                                kind = outcome.backup.kind,
+                                createdAt = outcome.backup.createdAt,
+                                count = plan.changes.size,
+                                changedSince = plan.changedSince,
+                                notFound = plan.notFound,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Writes the planned restore like an update: journaled first, so "Undo last update" undoes
+     * it. With backups on, the numbers it replaces are backed up first, so they outlive an
+     * uninstall too; but a restore never needs a folder, so a backup that fails is reported and
+     * the restore goes on.
+     */
+    private fun confirmRestore() {
+        val plan = pendingRestore ?: return
+        pendingRestore = null
+        status.update { it.copy(restore = null) }
+        if (updateJob?.isActive == true) return
+        updateJob = viewModelScope.launch {
+            runUpdate(ProgressKind.RESTORE, plan.changes.size) {
+                var backupFailed = false
+                if (settings.backup.first().enabled) {
+                    setBackingUp(true)
+                    val country = settings.config.first().countryIso
+                    when (val outcome = backups.backUpBeforeRestore(plan.changes, country)) {
+                        is BackupManager.WriteOutcome.Failed -> {
+                            Log.w(TAG, "Backup before the restore failed (${outcome.failure}), restoring anyway")
+                            backupFailed = true
+                            refreshBackupAccess()
+                        }
+
+                        BackupManager.WriteOutcome.PermissionDenied -> return@runUpdate RunResult.PermissionLost
+                        else -> Unit
+                    }
+                    setBackingUp(false)
+                }
+                journaledWrite(plan.changes) {
+                    contacts.write(plan.changes) { done, total -> reportProgress(done, total) }
+                }?.copy(changedBefore = plan.changedSince, notFound = plan.notFound, backupFailed = backupFailed)
+            }
         }
     }
 
@@ -469,6 +749,8 @@ class MainViewModel(
     }
 
     private fun onPermissionRechecked(granted: Boolean) {
+        // The folder's access may have been removed in the meantime.
+        refreshBackupAccess()
         val current = status.value.permission
         when {
             granted -> onGranted()
@@ -489,6 +771,8 @@ class MainViewModel(
         val wasGranted = status.value.permission == PermissionStatus.Granted
         loadJob?.cancel()
         callJob?.cancel()
+        restoreJob?.cancel()
+        pendingRestore = null
         loaded.value = null
         selection.value = emptySet()
         status.update {
@@ -498,6 +782,8 @@ class MainViewModel(
                 isRefreshing = false,
                 loadError = false,
                 call = null,
+                backupDialog = null,
+                restore = null,
             )
         }
         if (wasGranted) eventChannel.trySend(UiEvent.PermissionRevoked)
@@ -525,6 +811,8 @@ class MainViewModel(
                     undoJournal = container.undoJournal,
                     countryCatalog = container.countryCatalog,
                     formatter = container.formatter,
+                    backupStore = container.backupStore,
+                    backups = container.backupManager,
                 )
             }
         }

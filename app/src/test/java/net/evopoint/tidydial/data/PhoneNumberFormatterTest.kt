@@ -407,4 +407,27 @@ class PhoneNumberFormatterTest {
         assertFalse(formatter.isSameNumber("*#06#", "*#07#", "US"))
         assertFalse(formatter.isSameNumber("", "", "US"))
     }
+
+    @Test
+    fun sameDialledNumberAllowsOtherDelimitersForTheSameDigits() {
+        assertTrue(formatter.isSameDialledNumber("3105550142,12", "+1 310-555-0142;12", "US"))
+        assertTrue(formatter.isSameDialledNumber("3105550142p12", "+1 310-555-0142,12", "US"))
+        assertTrue(formatter.isSameDialledNumber("+1 310-555-0142 ext. 12", "+13105550142;12", "US"))
+        assertTrue(formatter.isSameDialledNumber("2125550101", "+1 212-555-0101", "us"))
+    }
+
+    @Test
+    fun sameDialledNumberNeedsTheSameExtension() {
+        assertFalse(formatter.isSameDialledNumber("+1 310-555-0142;12", "+1 310-555-0142;34", "US"))
+        assertFalse(formatter.isSameDialledNumber("+1 310-555-0142;12", "+1 310-555-0142", "US"))
+        assertFalse(formatter.isSameDialledNumber("+1 310-555-0142 ext. 12", "+1 310-555-0142", "US"))
+        assertFalse(formatter.isSameDialledNumber("+1 212-555-0101", "+1 212-555-0102", "US"))
+    }
+
+    @Test
+    fun sameDialledNumberCompareUnparsableNumbersByDigits() {
+        assertTrue(formatter.isSameDialledNumber("*#06#", "*#06#", "US"))
+        assertFalse(formatter.isSameDialledNumber("555-01,1", "555-01,2", "US"))
+        assertTrue(formatter.isSameDialledNumber("555-01;1", "555 01,1", "US"))
+    }
 }

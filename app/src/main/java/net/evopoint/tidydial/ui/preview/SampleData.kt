@@ -1,5 +1,6 @@
 package net.evopoint.tidydial.ui.preview
 
+import net.evopoint.tidydial.data.BackupKind
 import net.evopoint.tidydial.model.AccountInfo
 import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.ContactGroup
@@ -7,14 +8,17 @@ import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.PhoneEntry
 import net.evopoint.tidydial.model.groupByContact
+import net.evopoint.tidydial.ui.BackupUi
 import net.evopoint.tidydial.ui.CallRequest
 import net.evopoint.tidydial.ui.ContactFilter
 import net.evopoint.tidydial.ui.EntryCounts
 import net.evopoint.tidydial.ui.MainViewModel
 import net.evopoint.tidydial.ui.PermissionStatus
+import net.evopoint.tidydial.ui.RestoreConfirmation
 import net.evopoint.tidydial.ui.UiState
 import net.evopoint.tidydial.ui.UpdateProgress
 import net.evopoint.tidydial.ui.isSelectable
+import java.time.OffsetDateTime
 import java.util.Locale
 
 /**
@@ -120,6 +124,18 @@ object SampleData {
             appCall("WhatsApp", isVideo = false, dataId = 9402, mimeType = "vnd.com.whatsapp.voip.call"),
             appCall("WhatsApp", isVideo = true, dataId = 9403, mimeType = "vnd.com.whatsapp.video.call"),
         ),
+    )
+
+    /** Backups turned on, into a folder the user picked. */
+    val backupUi = BackupUi(enabled = true, folderName = "TidyDial backups")
+
+    /** A changes backup where two numbers were edited since and one contact is gone. */
+    val restoreConfirmation = RestoreConfirmation(
+        kind = BackupKind.CHANGES,
+        createdAt = OffsetDateTime.parse("2026-10-31T09:04:12Z"),
+        count = 23,
+        changedSince = 2,
+        notFound = 1,
     )
 
     /** Ids the app pre-selects after a load: every valid number that would change. */

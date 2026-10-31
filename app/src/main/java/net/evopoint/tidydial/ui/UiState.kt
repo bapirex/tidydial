@@ -1,5 +1,7 @@
 package net.evopoint.tidydial.ui
 
+import net.evopoint.tidydial.data.BackupKind
+import net.evopoint.tidydial.data.BackupReadError
 import net.evopoint.tidydial.model.AccountInfo
 import net.evopoint.tidydial.model.AppChat
 import net.evopoint.tidydial.model.CallOption
@@ -7,6 +9,7 @@ import net.evopoint.tidydial.model.ContactGroup
 import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.PhoneEntry
+import java.time.OffsetDateTime
 
 enum class PermissionStatus {
     /** Not checked yet (first frames after launch). */
@@ -22,13 +25,17 @@ enum class PermissionStatus {
 
 enum class ContactFilter { ALL, CHANGES, SELECTED, INVALID }
 
-enum class ProgressKind { APPLY, UNDO }
+enum class ProgressKind { APPLY, UNDO, RESTORE }
 
-/** Progress of a running update or undo; [done] goes from 0 to [total]. */
+/**
+ * Progress of a running update, undo or restore; [done] goes from 0 to [total].
+ * [isBackingUp]: the backup file is being written before the update starts.
+ */
 data class UpdateProgress(
     val done: Int,
     val total: Int,
     val kind: ProgressKind,
+    val isBackingUp: Boolean = false,
 ) {
     val fraction: Float
         get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
@@ -83,6 +90,56 @@ sealed interface CallRequest {
 }
 
 /**
+ * The Backups section of the options sheet.
+ *
+ * @property folderName the backup folder, or null when none was chosen.
+ * @property folderAvailable TidyDial still has access to the folder (false after the grant was
+ *   revoked); a deleted folder only shows when a backup fails.
+ * @property error why the last backup setting did not take effect. Shown inside the sheet or
+ *   dialog the user is looking at (the backup prompt, the failure dialog or the options sheet),
+ *   since a Snackbar would be hidden behind it; cleared by the next backup action or
+ *   [UiAction.DismissBackupError].
+ */
+data class BackupUi(
+    val enabled: Boolean = false,
+    val folderName: String? = null,
+    val folderAvailable: Boolean = true,
+    val error: BackupError? = null,
+)
+
+enum class BackupError {
+    /** TidyDial could not keep access to the picked folder. */
+    FOLDER_FAILED,
+
+    /** The backup choice could not be saved. */
+    SAVE_FAILED,
+
+    /** No app could be opened to pick a folder. */
+    NO_PICKER,
+}
+
+/** A backup question that holds an update until it is answered. */
+sealed interface BackupDialog {
+    /** The first update, before the user chose a backup folder or to continue without. */
+    data object FirstUpdate : BackupDialog
+
+    /** The backup could not be written to [folderName], so the update did not start. */
+    data class WriteFailed(val folderName: String?) : BackupDialog
+}
+
+/**
+ * Asks before restoring [count] numbers from a backup of [kind] made at [createdAt].
+ * [changedSince] and [notFound] entries will be left alone.
+ */
+data class RestoreConfirmation(
+    val kind: BackupKind,
+    val createdAt: OffsetDateTime,
+    val count: Int,
+    val changedSince: Int,
+    val notFound: Int,
+)
+
+/**
  * Everything the UI renders.
  *
  * @property isLoading the first load is running and nothing is shown yet.
@@ -102,6 +159,11 @@ sealed interface CallRequest {
  * @property call a call to start, to choose an app for or to ask the call permission for; the UI
  *   reports back with [UiAction.PickCall], [UiAction.CallPermissionResult], [UiAction.DismissCall]
  *   or [UiAction.CallFailed].
+ * @property backup the backup settings.
+ * @property backupDialog a backup question holding an update; the UI answers with
+ *   [UiAction.BackupFolderChosen], [UiAction.ContinueWithoutBackup], [UiAction.UpdateWithoutBackup]
+ *   or [UiAction.DismissBackupDialog].
+ * @property restore a restore waiting for [UiAction.ConfirmRestore] or [UiAction.DismissRestore].
  */
 data class UiState(
     val permission: PermissionStatus = PermissionStatus.Unknown,
@@ -120,6 +182,9 @@ data class UiState(
     val progress: UpdateProgress? = null,
     val canUndo: Boolean = false,
     val call: CallRequest? = null,
+    val backup: BackupUi = BackupUi(),
+    val backupDialog: BackupDialog? = null,
+    val restore: RestoreConfirmation? = null,
 ) {
     val isUpdating: Boolean get() = progress != null
 
@@ -176,6 +241,34 @@ sealed interface UiEvent {
      * [permanently]: the system will not ask again, only app settings can grant it.
      */
     data class CallPermissionDenied(val app: String, val permanently: Boolean) : UiEvent
+
+    /**
+     * A restore from a backup finished. [skippedChanged] numbers were changed since the backup
+     * and kept; [notFound] could not be found on this device. [backupFailed]: backups are on, but
+     * the backup of the replaced numbers could not be written (the restore ran anyway).
+     */
+    data class RestoredFromBackup(
+        val restored: Int,
+        val skippedChanged: Int,
+        val notFound: Int,
+        val failed: Int,
+        val backupFailed: Boolean = false,
+    ) : UiEvent
+
+    /**
+     * The picked backup has nothing to write: [alreadyRestored] numbers already match it,
+     * [changedSince] were changed since and [notFound] could not be found on this device.
+     */
+    data class NothingToRestore(val alreadyRestored: Int, val changedSince: Int, val notFound: Int) : UiEvent
+
+    /** The numbers to back up could not be read, so the update did not start. */
+    data object BackupReadFailed : UiEvent
+
+    /** The picked file could not be restored from. */
+    data class BackupUnreadable(val error: BackupReadError) : UiEvent
+
+    /** No app could be opened to pick a backup file. */
+    data object NoFilePicker : UiEvent
 }
 
 sealed interface UiAction {
@@ -234,4 +327,44 @@ sealed interface UiAction {
 
     /** Opens TidyDial's page in system settings; handled by the UI, not the ViewModel. */
     data object OpenAppSettings : UiAction
+
+    /**
+     * The folder picker returned [uri] (null when cancelled). A chosen folder turns backups on
+     * and continues an update held by [UiState.backupDialog].
+     */
+    data class BackupFolderChosen(val uri: String?) : UiAction
+
+    /** Answers the first-update prompt without backups, and continues the update. */
+    data object ContinueWithoutBackup : UiAction
+
+    /**
+     * Answers a [BackupDialog.WriteFailed]: runs the update it held once without a backup.
+     * Backups stay on for later updates.
+     */
+    data object UpdateWithoutBackup : UiAction
+
+    /** Closes [UiState.backupDialog]; the update it held does not start. */
+    data object DismissBackupDialog : UiAction
+
+    /**
+     * Turns backups on (only sent when a folder is set; otherwise the UI opens the folder picker)
+     * or off.
+     */
+    data class SetBackupEnabled(val enabled: Boolean) : UiAction
+
+    /** The surface showing [BackupUi.error] closed. */
+    data object DismissBackupError : UiAction
+
+    /** The user picked the backup file [uri] to restore from. */
+    data class RestoreFileChosen(val uri: String) : UiAction
+
+    data object ConfirmRestore : UiAction
+
+    data object DismissRestore : UiAction
+
+    /** No app could be opened to pick a backup folder; shown as [BackupUi.error]. */
+    data object FolderPickerUnavailable : UiAction
+
+    /** No app could be opened to pick a backup file. */
+    data object FilePickerUnavailable : UiAction
 }
