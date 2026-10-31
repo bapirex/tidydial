@@ -325,6 +325,53 @@ class PhoneNumberFormatterTest {
         assertFormatted("+64 27 412 3456", nz(NumberFormatStyle.RFC3966), "tel:+64-274-123-456")
     }
 
+    // Country rules: a number must still connect the way it is written
+
+    private fun config(region: String, style: NumberFormatStyle) =
+        FormatConfig(countryIso = region, formatStyle = style)
+
+    @Test
+    fun domesticOnlyNumbersNeverGetACountryCode() {
+        for (style in NumberFormatStyle.entries) {
+            assertUnchanged("1800 123 456", config("AU", style), expectValid = true)
+            assertUnchanged("0800 12 3456", config("BR", style), expectValid = true)
+            assertUnchanged("400 123 4567", config("CN", style), expectValid = true)
+        }
+    }
+
+    @Test
+    fun domesticOnlyNumberLosesAnUndiallableCountryCode() {
+        assertFormatted("+61 1800 123 456", config("AU", NumberFormatStyle.E164), "1800 123 456")
+    }
+
+    @Test
+    fun nationalStyleKeepsCountryCodeWhereMobilesNeedIt() {
+        assertUnchanged("+55 11 2345-6789", config("BR", NumberFormatStyle.NATIONAL), expectValid = true)
+        assertUnchanged("+52 222 123 4567", config("MX", NumberFormatStyle.NATIONAL), expectValid = true)
+        assertFormatted("+522221234567", config("MX", NumberFormatStyle.NATIONAL), "+52 222 123 4567")
+    }
+
+    @Test
+    fun nationalStyleStillFormatsNationalNumbersWhereMobilesNeedTheCountryCode() {
+        assertFormatted("11 2345 6789", config("BR", NumberFormatStyle.NATIONAL), "(11) 2345-6789")
+    }
+
+    @Test
+    fun brazilianCarrierCodeIsKept() {
+        assertFormatted("021 11 2345-6789", config("BR", NumberFormatStyle.NATIONAL), "0 21 (11) 2345-6789")
+        assertFormatted("021 11 2345-6789", config("BR", NumberFormatStyle.INTERNATIONAL), "+55 11 2345-6789")
+    }
+
+    @Test
+    fun nationalStyleStripsCountryCodeOfRegionSharingCallingCode() {
+        assertFormatted("+44 7797 712345", config("JE", NumberFormatStyle.NATIONAL), "07797 712345")
+    }
+
+    @Test
+    fun trunkPrefixInParenthesesIsDropped() {
+        assertFormatted("+44 (0)20 7946 0958", config("GB", NumberFormatStyle.INTERNATIONAL), "+44 20 7946 0958")
+    }
+
     @Test
     fun exampleNumberForUnknownRegionIsNull() {
         assertNull(formatter.exampleNumber("ZZ", NumberFormatStyle.INTERNATIONAL))
