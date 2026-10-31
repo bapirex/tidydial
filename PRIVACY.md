@@ -39,6 +39,9 @@ Android Settings.
 - **Your backup choice**: whether backups are on, a link to the backup folder you picked and its
   name, and which folder the latest snapshot was saved in. This is kept out of cloud backups and
   device-to-device transfer, because access to the folder does not carry over to a new install.
+- **Refused permissions**: whether you refused the call permission before, so TidyDial can tell
+  when Android stops asking and point you to the settings instead. This is also kept out of cloud
+  backups and device-to-device transfer.
 
 This data is stored in the app's private storage and is never sent anywhere. The undo journal
 contains phone numbers, so it is excluded from cloud backups (and from all backups on Android 11
@@ -54,8 +57,8 @@ backup, and you can change this at any time in Format options.
   account type and account name (for a Google account, this is usually its email address),
   Android's internal row and contact IDs, the contact's lookup key and the ID its sync account
   (for example Google) gives it, the country setting and the TidyDial version. The first backup
-  in a folder comes with a snapshot of every phone number in every account, including accounts
-  that are skipped, as it was when the snapshot was taken. If you updated numbers before turning
+  after you choose a folder comes with a snapshot of every phone number in every account,
+  including accounts that are skipped, as it was when the snapshot was taken. If you updated numbers before turning
   backups on, the snapshot already contains those changes.
 - **Where they are stored**: only in the folder you pick in Android's file picker, such as
   Documents or a folder inside Downloads, or a folder of a cloud storage app that offers its

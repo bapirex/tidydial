@@ -171,8 +171,9 @@ class PermissionSettingsTest {
 
     @Test
     fun permanentlyRefusedOpensTheAppSettings() {
-        // Refused without a rationale expected: also what comes back when no dialog was shown.
+        // Refused before, and without a rationale expected now: no dialog was shown.
         grantContacts()
+        PermissionRefusals(app).markRefused(Manifest.permission.CALL_PHONE)
         showSection()
         tap("Allow")
         answer(mapOf(Manifest.permission.CALL_PHONE to false))
@@ -186,6 +187,48 @@ class PermissionSettingsTest {
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, started.action)
         assertEquals("package:${app.packageName}", started.dataString)
         assertEquals(1, registry.requests.size)
+    }
+
+    @Test
+    fun aSecondCallRefusalOpensTheAppSettings() {
+        grantContacts()
+        shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(Manifest.permission.CALL_PHONE, true)
+        showSection()
+        tap("Allow")
+
+        shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(Manifest.permission.CALL_PHONE, false)
+        answer(mapOf(Manifest.permission.CALL_PHONE to false))
+
+        composeRule.onNodeWithText("Open settings").assertExists()
+    }
+
+    @Test
+    fun aCallDialogClosedWithoutAnAnswerStillOffersAllow() {
+        // Back or a tap outside on Android 11+ looks like a permanent refusal, but the next
+        // request still shows the dialog.
+        grantContacts()
+        showSection()
+        tap("Allow")
+
+        answer(mapOf(Manifest.permission.CALL_PHONE to false))
+
+        composeRule.onNodeWithText("Allow").assertExists()
+        composeRule.onNodeWithText("Android won’t ask again. Allow it in settings.").assertDoesNotExist()
+    }
+
+    @Test
+    fun noSettingsAppToOpenDoesNotCrash() {
+        // Some locked-down devices disable the settings app.
+        shadowOf(app).checkActivities(true)
+        grantContacts()
+        PermissionRefusals(app).markRefused(Manifest.permission.CALL_PHONE)
+        showSection()
+        tap("Allow")
+        answer(mapOf(Manifest.permission.CALL_PHONE to false))
+
+        tap("Open settings")
+
+        composeRule.onNodeWithText("Open settings").assertExists()
     }
 
     @Test
@@ -216,6 +259,7 @@ class PermissionSettingsTest {
     @Test
     fun grantedInTheSettingsShowsOnReturn() {
         grantContacts()
+        PermissionRefusals(app).markRefused(Manifest.permission.CALL_PHONE)
         showSection()
         tap("Allow")
         answer(mapOf(Manifest.permission.CALL_PHONE to false))
@@ -225,6 +269,7 @@ class PermissionSettingsTest {
 
         composeRule.onNodeWithText("Optional · Allowed").assertExists()
         composeRule.onNodeWithText("Open settings").assertDoesNotExist()
+        assertFalse(PermissionRefusals(app).wasRefused(Manifest.permission.CALL_PHONE))
     }
 
     @Test

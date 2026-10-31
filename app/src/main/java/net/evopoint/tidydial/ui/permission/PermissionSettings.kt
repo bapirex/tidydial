@@ -120,10 +120,11 @@ class PermissionSettings internal constructor(
  * system page about removing permissions of unused apps.
  *
  * Rechecks on every resume (back from the system settings or a dialog) and after each answer.
- * Like the setup screen, a permission counts as permanently denied when a request comes back
+ * Like the setup screen, contacts access counts as permanently denied when a request comes back
  * refused while no rationale is expected, which is also what happens when the dialog was not
- * shown at all; until then "Allow" is offered. Contacts access lost while the app runs still
- * leads back to the setup screen, through the app's own recheck.
+ * shown at all; until then "Allow" is offered. The call permission follows [isPermanentRefusal]
+ * instead, so a call dialog closed without an answer still offers "Allow". Contacts access lost
+ * while the app runs still leads back to the setup screen, through the app's own recheck.
  */
 @Composable
 internal fun rememberPermissionSettings(
@@ -131,11 +132,13 @@ internal fun rememberPermissionSettings(
 ): PermissionSettings {
     val context = LocalContext.current
     val activity = LocalActivity.current
+    val refusals = rememberPermissionRefusals()
     var contactsGranted by remember { mutableStateOf(context.hasContactsPermission()) }
     var callsGranted by remember { mutableStateOf(context.hasPermission(Manifest.permission.CALL_PHONE)) }
     // Saved, so "Open settings" survives rotation; a fresh sheet offers "Allow" again first.
     var contactsPermanentlyDenied by rememberSaveable { mutableStateOf(false) }
     var callsPermanentlyDenied by rememberSaveable { mutableStateOf(false) }
+    var callsRationaleBefore by rememberSaveable { mutableStateOf(false) }
     var restrictions by remember { mutableStateOf<UnusedAppRestrictions?>(null) }
     var checks by remember { mutableIntStateOf(0) }
 
@@ -143,7 +146,10 @@ internal fun rememberPermissionSettings(
         contactsGranted = context.hasContactsPermission()
         callsGranted = context.hasPermission(Manifest.permission.CALL_PHONE)
         if (contactsGranted) contactsPermanentlyDenied = false
-        if (callsGranted) callsPermanentlyDenied = false
+        if (callsGranted) {
+            callsPermanentlyDenied = false
+            refusals.forget(Manifest.permission.CALL_PHONE)
+        }
         checks++
     }
 
@@ -163,7 +169,8 @@ internal fun rememberPermissionSettings(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { result ->
         if (result[Manifest.permission.CALL_PHONE] == false) {
-            callsPermanentlyDenied = !activity.canAskAgain(CallPermissions)
+            callsPermanentlyDenied =
+                refusals.onRefused(activity, Manifest.permission.CALL_PHONE, callsRationaleBefore)
         }
         recheck()
     }
@@ -187,8 +194,11 @@ internal fun rememberPermissionSettings(
         onAction = { action ->
             when (action) {
                 PermissionAction.AllowContacts -> contactsLauncher.launch(ContactPermissions)
-                PermissionAction.AllowCalls -> callsLauncher.launch(CallPermissions)
-                PermissionAction.OpenAppSettings -> context.tryOpenAppSettings()
+                PermissionAction.AllowCalls -> {
+                    callsRationaleBefore = activity.expectsRationale(Manifest.permission.CALL_PHONE)
+                    callsLauncher.launch(CallPermissions)
+                }
+                PermissionAction.OpenAppSettings -> context.openAppSettings()
                 PermissionAction.ManageUnusedAppRestrictions -> {
                     val launched = context.unusedAppRestrictionsIntent()?.let { intent ->
                         try {
@@ -199,7 +209,7 @@ internal fun rememberPermissionSettings(
                         }
                     } ?: false
                     // From Android 12 the setting is on the app's info page anyway.
-                    if (!launched) context.tryOpenAppSettings()
+                    if (!launched) context.openAppSettings()
                 }
             }
         },
@@ -220,10 +230,3 @@ private fun Context.unusedAppRestrictionsIntent(): Intent? = try {
     null
 }
 
-private fun Context.tryOpenAppSettings() {
-    try {
-        openAppSettings()
-    } catch (e: ActivityNotFoundException) {
-        // No settings app to open (some locked-down devices): nothing else to offer.
-    }
-}

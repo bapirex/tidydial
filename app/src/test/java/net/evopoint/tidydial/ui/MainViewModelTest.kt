@@ -84,6 +84,9 @@ class MainViewModelTest {
     private val backupStore = FakeBackupStore(log)
     private val clock = Clock.fixed(Instant.parse("2026-10-31T09:04:12Z"), ZoneOffset.UTC)
 
+    /** The largest backup file the ViewModel's [BackupManager] writes or reads. */
+    private var maxBackupBytes = BackupManager.MAX_FILE_BYTES
+
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -115,7 +118,16 @@ class MainViewModelTest {
             countryCatalog = catalog,
             formatter = formatter,
             backupStore = backupStore,
-            backups = BackupManager(backupStore, settings, contacts, "1.2.0", formatter, { clock }, dispatcher),
+            backups = BackupManager(
+                backupStore,
+                settings,
+                contacts,
+                "1.2.0",
+                formatter,
+                { clock },
+                dispatcher,
+                maxBackupBytes,
+            ),
             defaultDispatcher = dispatcher,
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
@@ -900,6 +912,25 @@ class MainViewModelTest {
         assertEquals(2, backupStore.files(FOLDER).size)
     }
 
+    @Test
+    fun backupTooLargeToRestoreOffersOnlyTheUpdateWithoutIt() = runTest(dispatcher) {
+        // The snapshot of the sample book is a few kB; a book this limit cannot hold is huge.
+        maxBackupBytes = 2_000
+        val viewModel = backedUpViewModel()
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        assertEquals(BackupDialog.WriteFailed(FOLDER_NAME, tooLarge = true), viewModel.ui.backupDialog)
+        assertTrue(backupStore.files(FOLDER).isEmpty())
+        assertEquals(0, contacts.applyCalls)
+        // Choosing another folder would not help; the access check is not even needed.
+        assertTrue(viewModel.ui.backup.folderAvailable)
+
+        viewModel.onAction(UiAction.UpdateWithoutBackup)
+        advanceUntilIdle()
+        assertEquals(1, contacts.applyCalls)
+    }
+
     private class Restorable(val viewModel: MainViewModel, val backup: String, val events: MutableList<UiEvent>)
 
     /**
@@ -1055,6 +1086,72 @@ class MainViewModelTest {
         // 102 was edited elsewhere, so the undo kept it; every other number holds its "before".
         assertEquals(listOf(UiEvent.NothingToRestore(alreadyRestored = 5, changedSince = 1, notFound = 0)), events)
         assertNull(viewModel.ui.restore)
+    }
+
+    @Test
+    fun readingABackupShowsUntilItsPlanIsReady() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        contacts.rowsGate = CompletableDeferred()
+
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        runCurrent()
+        assertTrue(viewModel.ui.preparingRestore)
+        assertNull(viewModel.ui.restore)
+
+        contacts.rowsGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(viewModel.ui.preparingRestore)
+        assertEquals(4, viewModel.ui.restore?.count)
+    }
+
+    @Test
+    fun readingABackupCanBeStopped() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        contacts.rowsGate = CompletableDeferred()
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        runCurrent()
+
+        viewModel.onAction(UiAction.DismissRestore)
+        runCurrent()
+        assertFalse(viewModel.ui.preparingRestore)
+        contacts.rowsGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.restore)
+        assertTrue(restorable.events.isEmpty())
+        // And the next pick is read again.
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        advanceUntilIdle()
+        assertEquals(4, viewModel.ui.restore?.count)
+    }
+
+    @Test
+    fun noUpdateOrUndoStartsWhileABackupIsRead() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        // One number to update again, and the earlier update to undo.
+        contacts.numbers[103L] = "2125550103"
+        viewModel.onAction(UiAction.Refresh)
+        advanceUntilIdle()
+        assertTrue(viewModel.ui.counts.selected > 0)
+        assertTrue(viewModel.ui.canUndo)
+        val numbers = contacts.numbers.toMap()
+        contacts.rowsGate = CompletableDeferred()
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        runCurrent()
+
+        // A restore planned from numbers they change would confirm a stale count.
+        viewModel.onAction(UiAction.ApplySelected)
+        viewModel.onAction(UiAction.UndoLast)
+        runCurrent()
+        contacts.rowsGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, contacts.applyCalls)
+        assertEquals(numbers, contacts.numbers)
+        assertFalse(viewModel.ui.preparingRestore)
     }
 
     @Test
@@ -1578,6 +1675,57 @@ class MainViewModelTest {
     }
 
     @Test
+    fun permanentlyRefusedCallPermissionIsExplainedOnReturnFromTheChat() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = false))
+        // Back from the permission request, before the chat opened: too early.
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+
+        // The chat opened, and the user came back from it.
+        viewModel.onAction(UiAction.DismissCall)
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+        assertEquals(listOf<UiEvent>(UiEvent.CallOpenedChat("Signal")), events)
+
+        // Said once per chat.
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+        assertEquals(1, events.size)
+    }
+
+    @Test
+    fun aChatOpenedAfterAPlainRefusalNeedsNoExplanation() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = true))
+        viewModel.onAction(UiAction.DismissCall)
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun aChatThatDidNotOpenIsNotExplained() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = false))
+        viewModel.onAction(UiAction.CallFailed)
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+
+        assertEquals(listOf<UiEvent>(UiEvent.CallFailed), events)
+    }
+
+    @Test
     fun refusedCallPermissionWithoutAChatIsExplained() = runTest(dispatcher) {
         val noChat = guardedVoice.copy(chat = null)
         val viewModel = choosing(noChat)
@@ -1691,6 +1839,7 @@ class MainViewModelTest {
         var removedIds: Set<Long> = emptySet()
         var loadGate: CompletableDeferred<Unit>? = null
         var applyGate: CompletableDeferred<Unit>? = null
+        var rowsGate: CompletableDeferred<Unit>? = null
         var failLoad = false
         var denyLoad = false
         var failRows = false
@@ -1752,6 +1901,7 @@ class MainViewModelTest {
 
         /** The sample rows with made-up identities: Google contacts carry a source id. */
         override suspend fun readPhoneRows(): PhoneRowsResult {
+            rowsGate?.await()
             if (denyLoad) return PhoneRowsResult.PermissionDenied
             if (failRows) return PhoneRowsResult.Error(IllegalStateException("test"))
             val rows = SampleData.entries.filter { it.dataId !in removedIds }.map { entry ->

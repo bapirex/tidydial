@@ -36,6 +36,9 @@ enum class BackupFailure {
 
     /** The numbers to back up could not be read from the contacts. */
     READ_CONTACTS_FAILED,
+
+    /** The file would be larger than TidyDial can read back to restore it, so it was not written. */
+    TOO_LARGE,
 }
 
 sealed interface BackupWriteResult {

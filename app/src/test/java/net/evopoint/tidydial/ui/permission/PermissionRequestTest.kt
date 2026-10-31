@@ -20,6 +20,8 @@ import net.evopoint.tidydial.ui.PermissionStatus
 import net.evopoint.tidydial.ui.UiAction
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -181,6 +183,22 @@ class PermissionRequestTest {
         tapContinue()
 
         assertEquals(listOf(contactsAndCalls, contactsOnly), registry.requests.map { it.second })
+        // Kept across launches, so a later call can tell when Android stopped asking.
+        assertTrue(PermissionRefusals(app).wasRefused(Manifest.permission.CALL_PHONE))
+    }
+
+    @Test
+    fun onlyARefusalThatFollowsAnotherIsPermanent() {
+        // A second refusal: the rationale expected after the first one is gone.
+        assertTrue(isPermanentRefusal(rationaleBefore = true, rationaleAfter = false, refusedBefore = false))
+        // Refused here before (for example during setup), and the dialog did not show.
+        assertTrue(isPermanentRefusal(rationaleBefore = false, rationaleAfter = false, refusedBefore = true))
+        // A first refusal.
+        assertFalse(isPermanentRefusal(rationaleBefore = false, rationaleAfter = true, refusedBefore = false))
+        // A first dialog closed with Back or a tap outside on Android 11+.
+        assertFalse(isPermanentRefusal(rationaleBefore = false, rationaleAfter = false, refusedBefore = false))
+        // A dialog closed after one refusal.
+        assertFalse(isPermanentRefusal(rationaleBefore = true, rationaleAfter = true, refusedBefore = true))
     }
 
     @Test

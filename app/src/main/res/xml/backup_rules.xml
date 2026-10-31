@@ -5,7 +5,7 @@
 
     The backup settings (and the temporary file DataStore writes them through) are excluded too: the
     backup folder's access grant does not carry over to a new install, and a new install writes a
-    new snapshot.
+    new snapshot. So is the record of refused permissions, which only describes this install.
 -->
 <full-backup-content>
     <exclude
@@ -20,4 +20,7 @@
     <exclude
         domain="file"
         path="datastore/backup.preferences_pb.tmp" />
+    <exclude
+        domain="sharedpref"
+        path="permission_refusals.xml" />
 </full-backup-content>

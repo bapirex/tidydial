@@ -53,8 +53,8 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 - **Backups that outlive the app.** On the first update TidyDial offers to keep backups in a
   folder you pick (Documents, a folder inside Downloads, or a cloud storage app's folder if it
   offers one) through Android's file picker, which needs no permission. Before each update it
-  saves a readable JSON file with the old and new numbers, and the first backup in a folder comes
-  with a snapshot of every number as it was when the snapshot was taken. An update does not start
+  saves a readable JSON file with the old and new numbers, and the first backup after you choose a
+  folder comes with a snapshot of every number as it was when the snapshot was taken. An update does not start
   if its backup cannot be written, unless you choose to run it without one. *Restore from a
   backup…* in Format options works even after reinstalling, with the same safety rules: only
   numbers that still look as the update left them are restored (for a snapshot, only the

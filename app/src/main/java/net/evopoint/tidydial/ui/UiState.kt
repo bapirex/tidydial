@@ -123,8 +123,11 @@ sealed interface BackupDialog {
     /** The first update, before the user chose a backup folder or to continue without. */
     data object FirstUpdate : BackupDialog
 
-    /** The backup could not be written to [folderName], so the update did not start. */
-    data class WriteFailed(val folderName: String?) : BackupDialog
+    /**
+     * The backup could not be written to [folderName], so the update did not start. [tooLarge]:
+     * the file would be too large to restore, so another folder would not help.
+     */
+    data class WriteFailed(val folderName: String?, val tooLarge: Boolean = false) : BackupDialog
 }
 
 /**
@@ -164,6 +167,9 @@ data class RestoreConfirmation(
  *   [UiAction.BackupFolderChosen], [UiAction.ContinueWithoutBackup], [UiAction.UpdateWithoutBackup]
  *   or [UiAction.DismissBackupDialog].
  * @property restore a restore waiting for [UiAction.ConfirmRestore] or [UiAction.DismissRestore].
+ * @property preparingRestore the backup picked for a restore is being read and compared with the
+ *   contacts, which can take seconds for a large book or a cloud file; [UiAction.DismissRestore]
+ *   stops it.
  */
 data class UiState(
     val permission: PermissionStatus = PermissionStatus.Unknown,
@@ -185,6 +191,7 @@ data class UiState(
     val backup: BackupUi = BackupUi(),
     val backupDialog: BackupDialog? = null,
     val restore: RestoreConfirmation? = null,
+    val preparingRestore: Boolean = false,
 ) {
     val isUpdating: Boolean get() = progress != null
 
@@ -241,6 +248,12 @@ sealed interface UiEvent {
      * [permanently]: the system will not ask again, only app settings can grant it.
      */
     data class CallPermissionDenied(val app: String, val permanently: Boolean) : UiEvent
+
+    /**
+     * The call permission that [app] needs is refused for good, so its chat opened instead of
+     * the call. Sent once the user is back from the chat, so it is not missed.
+     */
+    data class CallOpenedChat(val app: String) : UiEvent
 
     /**
      * A restore from a backup finished. [skippedChanged] numbers were changed since the backup
@@ -360,6 +373,7 @@ sealed interface UiAction {
 
     data object ConfirmRestore : UiAction
 
+    /** Closes [UiState.restore], or stops reading the backup while [UiState.preparingRestore]. */
     data object DismissRestore : UiAction
 
     /** No app could be opened to pick a backup folder; shown as [BackupUi.error]. */

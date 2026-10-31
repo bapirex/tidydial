@@ -202,6 +202,8 @@
     <string name="list_snackbar_call_failed">No app could start this call</string>
     <!-- The call permission was refused, and the app has no chat to open instead. %1$s is an app name such as WhatsApp. -->
     <string name="list_snackbar_call_permission">Calling through %1$s needs permission to make phone calls</string>
+    <!-- The call permission was refused for good, so the app's chat opened instead of the call. Shown when the user comes back from the chat. %1$s is an app name such as WhatsApp. -->
+    <string name="list_snackbar_call_opened_chat">Opened the chat in %1$s instead. To call from TidyDial, allow phone calls in settings.</string>
     <!-- Snackbar action that opens TidyDial's page in system settings. -->
     <string name="list_snackbar_settings">Settings</string>
 
@@ -219,7 +221,7 @@
     <string name="backup_prompt_title">Keep a backup?</string>
     <string name="backup_prompt_body">Keep a copy of every change in a folder you choose, so you can restore your numbers even after uninstalling TidyDial.</string>
     <string name="backup_prompt_snapshot">The first backup also saves all your numbers as they are now.</string>
-    <string name="backup_prompt_privacy">Backups hold names and numbers. TidyDial never sends them anywhere, but if you pick a folder of a cloud storage app, that app syncs them like any other file.</string>
+    <string name="backup_prompt_privacy">Backups hold names, numbers and the accounts they’re saved in (for a Google account, its email address). TidyDial never sends them anywhere, but if you pick a folder of a cloud storage app, that app syncs them like any other file.</string>
     <string name="backup_prompt_choose">Choose backup folder</string>
     <string name="backup_prompt_skip">Continue without</string>
     <string name="backup_prompt_later">You can change this later in Format options.</string>
@@ -229,9 +231,14 @@
     <!-- %1$s is the name of the backup folder, e.g. "Documents". -->
     <string name="backup_failed_body">TidyDial couldn’t save the backup in “%1$s”, so nothing was changed. The folder may have been moved or deleted, or access to it was removed.</string>
     <string name="backup_failed_body_no_folder">TidyDial couldn’t save the backup, so nothing was changed. Choose a folder for backups.</string>
+    <!-- The backup file would hold so many numbers that TidyDial could not read it back to restore it, so it was not saved. -->
+    <string name="backup_failed_body_too_large">Your contacts hold too many numbers for a backup TidyDial could restore, so nothing was saved or changed. You can update without a backup, or turn off backups in Format options.</string>
     <string name="backup_failed_choose">Choose folder</string>
     <!-- Runs this one update without a backup; backups stay on for later updates. -->
     <string name="backup_failed_update_anyway">Update without backup</string>
+
+    <!-- Shown while the backup file picked for a restore is read and compared with the contacts. -->
+    <string name="restore_preparing">Reading backup…</string>
 
     <!-- Restore confirmation. %1$d is the number of numbers, %2$s the date and time of the backup, e.g. "Oct 31, 2026, 9:04 AM". -->
     <plurals name="restore_confirm_title">

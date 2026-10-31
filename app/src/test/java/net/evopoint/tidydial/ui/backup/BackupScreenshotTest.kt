@@ -24,6 +24,7 @@ import net.evopoint.tidydial.ui.options.SheetFrame
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -113,6 +114,63 @@ class BackupScreenshotTest {
         "backup_failed",
         SampleData.uiState().copy(backupDialog = BackupDialog.WriteFailed(SampleData.backupUi.folderName)),
     )
+
+    /** The narrowest common phone at the largest font: every button keeps its label. */
+    @Test
+    @Config(qualifiers = "w360dp-h780dp-xxhdpi", fontScale = 2f)
+    fun backupFailedLargestFont() = captureDialog(
+        "backup_failed_font_2_0",
+        SampleData.uiState().copy(backupDialog = BackupDialog.WriteFailed(SampleData.backupUi.folderName)),
+    )
+
+    @Test
+    @Config(qualifiers = "w360dp-h780dp-xxhdpi", fontScale = 2f)
+    fun backupFailedKeepsCancelUsableAtTheLargestFont() {
+        setScreen(SampleData.uiState().copy(backupDialog = BackupDialog.WriteFailed("TidyDial backups")))
+        val cancel = composeRule.onNodeWithText("Cancel").fetchSemanticsNode().boundsInRoot
+        val update = composeRule.onNodeWithText("Update without backup").fetchSemanticsNode().boundsInRoot
+        // Not squeezed beside "Update without backup", but moved under it.
+        assertTrue(cancel.width > cancel.height)
+        assertTrue(cancel.top >= update.bottom)
+
+        composeRule.onNodeWithText("Cancel").performClick()
+        assertEquals(listOf<UiAction>(UiAction.DismissBackupDialog), actions)
+    }
+
+    @Test
+    fun backupFailedTooLarge() = captureDialog(
+        "backup_failed_too_large",
+        SampleData.uiState().copy(
+            backupDialog = BackupDialog.WriteFailed(SampleData.backupUi.folderName, tooLarge = true),
+        ),
+    )
+
+    @Test
+    fun backupTooLargeOffersOnlyTheUpdateWithoutIt() {
+        setScreen(
+            SampleData.uiState().copy(backupDialog = BackupDialog.WriteFailed("TidyDial backups", tooLarge = true)),
+        )
+        composeRule.onNodeWithText("Choose folder").assertDoesNotExist()
+        composeRule.onNodeWithText("Update without backup").performClick()
+        assertEquals(listOf<UiAction>(UiAction.UpdateWithoutBackup), actions)
+    }
+
+    @Test
+    fun restorePreparing() = captureDialog("restore_preparing", SampleData.uiState().copy(preparingRestore = true))
+
+    @Test
+    fun readingABackupShowsOnlyWhenItTakesAWhile() {
+        composeRule.mainClock.autoAdvance = false
+        setScreen(SampleData.uiState().copy(preparingRestore = true))
+        composeRule.mainClock.advanceTimeBy(200)
+        composeRule.onNodeWithText("Reading backup…").assertDoesNotExist()
+
+        composeRule.mainClock.advanceTimeBy(1_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Reading backup…").assertExists()
+        composeRule.onNodeWithText("Cancel").performClick()
+        assertEquals(listOf<UiAction>(UiAction.DismissRestore), actions)
+    }
 
     @Test
     fun restoreConfirmReportsTheAnswer() {
