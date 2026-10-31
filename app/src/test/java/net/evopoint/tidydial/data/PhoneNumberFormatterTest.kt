@@ -273,6 +273,58 @@ class PhoneNumberFormatterTest {
         assertUnchanged(example, config, expectValid = true)
     }
 
+    // Grouping: an already grouped number is not reshuffled (reported by a tester for a New Zealand 027 4 mobile)
+
+    private fun nz(style: NumberFormatStyle = NumberFormatStyle.INTERNATIONAL) =
+        FormatConfig(countryIso = "NZ", formatStyle = style)
+
+    private fun assertFormatted(input: String, config: FormatConfig, expected: String) {
+        val result = formatter.format(input, config)
+        assertTrue(result.isValid)
+        assertTrue(result.isModified)
+        assertEquals(expected, result.formattedNumber)
+    }
+
+    @Test
+    fun groupedInternationalNumberWithOtherSpacingIsKept() {
+        // libphonenumber groups 0274 mobiles as "+64 274 123 456".
+        assertUnchanged("+64 27 412 3456", nz(), expectValid = true)
+        assertUnchanged("+64 27 412 3456", us(), expectValid = true)
+    }
+
+    @Test
+    fun groupedNationalNumberWithOtherSpacingIsKept() {
+        assertUnchanged("027 412 3456", nz(NumberFormatStyle.NATIONAL), expectValid = true)
+    }
+
+    @Test
+    fun ungroupedNumberIsStillGrouped() {
+        assertFormatted("+64211234567", nz(), "+64 21 123 4567")
+        assertFormatted("+64274123456", nz(), "+64 274 123 456")
+    }
+
+    @Test
+    fun otherSeparatorsAreStillNormalized() {
+        assertFormatted("+64 3-234 5678", nz(), "+64 3 234 5678")
+        assertFormatted("+1 212 555 0199", us(), "+1 212-555-0199")
+    }
+
+    @Test
+    fun countryCodeMustStandOnItsOwn() {
+        assertFormatted("+6427 412 3456", nz(), "+64 274 123 456")
+    }
+
+    @Test
+    fun irregularWhitespaceIsNormalized() {
+        assertFormatted("+64  27 412 3456", nz(), "+64 274 123 456")
+    }
+
+    @Test
+    fun formatsWithoutSpacesStillApply() {
+        assertFormatted("+64 27 412 3456", nz(NumberFormatStyle.E164), "+64274123456")
+        assertFormatted("+64 27 412 3456", nz(NumberFormatStyle.RFC3966), "tel:+64-274-123-456")
+    }
+
     @Test
     fun exampleNumberForUnknownRegionIsNull() {
         assertNull(formatter.exampleNumber("ZZ", NumberFormatStyle.INTERNATIONAL))

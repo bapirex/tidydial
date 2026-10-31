@@ -64,11 +64,26 @@ class PhoneNumberFormatter(
             base + separatorFor(config.extensionDelimiter, split.delimiter) + split.rest
         }
 
-        return if (result == trimmed) {
+        return if (result == trimmed || differsOnlyInGrouping(trimmed, result)) {
             unchanged(rawNumber, isValid = true)
         } else {
             FormattedResult(result, isValid = true, isModified = true)
         }
+    }
+
+    /**
+     * True when [original] already has the target's characters and is grouped with single
+     * spaces, only in different places. Grouping conventions vary (libphonenumber writes a New
+     * Zealand 0274 mobile as "+64 274 123 456" while people write "+64 27 412 3456"), so an
+     * already grouped number is left alone rather than shuffled around. The country code must
+     * still stand on its own, and formats without spaces (E.164) are always applied.
+     */
+    private fun differsOnlyInGrouping(original: String, formatted: String): Boolean {
+        if (' ' !in formatted || ' ' !in original) return false
+        if ("  " in original || original.any { it.isWhitespace() && it != ' ' }) return false
+        if (original.replace(" ", "") != formatted.replace(" ", "")) return false
+        return !formatted.startsWith('+') ||
+            original.substringBefore(' ') == formatted.substringBefore(' ')
     }
 
     /**
