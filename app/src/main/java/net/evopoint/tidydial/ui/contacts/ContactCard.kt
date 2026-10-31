@@ -34,6 +34,7 @@ import net.evopoint.tidydial.ui.theme.TidyDialTheme
  *
  * [onToggleEntries] toggles one row's data ids; [onToggleContact] gets the contact id and the
  * selectable ids of the numbers shown, so numbers hidden by the filter or search are left alone.
+ * [onCall] gets the number whose call button was tapped.
  */
 @Composable
 fun ContactCard(
@@ -41,6 +42,7 @@ fun ContactCard(
     selection: Set<Long>,
     onToggleEntries: (List<Long>) -> Unit,
     onToggleContact: (Long, List<Long>) -> Unit,
+    onCall: (NumberItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = remember(group) { group.entries.toNumberItems() }
@@ -101,6 +103,9 @@ fun ContactCard(
                     item = item,
                     selected = item.isSelectedIn(selection),
                     onToggle = { onToggleEntries(item.dataIds) },
+                    onCall = { onCall(item) },
+                    // Tidy cards have a narrower inset; this keeps the call buttons in one column.
+                    modifier = if (allTidy) Modifier.padding(end = 4.dp) else Modifier,
                     showAccount = showAccounts,
                 )
             }
@@ -132,6 +137,7 @@ private fun ContactCardPreview() {
                     selection = SampleData.defaultSelection,
                     onToggleEntries = {},
                     onToggleContact = { _, _ -> },
+                    onCall = {},
                 )
             }
         }

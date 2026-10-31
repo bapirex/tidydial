@@ -38,6 +38,7 @@ import net.evopoint.tidydial.data.SettingsRepository
 import net.evopoint.tidydial.data.UndoJournal
 import net.evopoint.tidydial.data.UpdateResult
 import net.evopoint.tidydial.model.AccountInfo
+import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.ContactGroup
 import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.FormatConfig
@@ -75,6 +76,7 @@ class MainViewModel(
         val canUndo: Boolean = false,
         val detectedCountryIso: String = SettingsRepository.FALLBACK_COUNTRY,
         val countries: List<Country> = emptyList(),
+        val call: CallRequest? = null,
     )
 
     private class Display(val groups: List<ContactGroup>, val counts: EntryCounts)
@@ -100,6 +102,7 @@ class MainViewModel(
 
     private var loadJob: Job? = null
     private var updateJob: Job? = null
+    private var callJob: Job? = null
 
     @OptIn(FlowPreview::class)
     private val display: Flow<Display> = combine(
@@ -149,6 +152,7 @@ class MainViewModel(
             countries = status.countries,
             progress = status.progress,
             canUndo = status.canUndo,
+            call = status.call,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), UiState())
 
@@ -191,6 +195,16 @@ class MainViewModel(
             is UiAction.UpdateConfig -> updateConfig(action.config)
             is UiAction.PermissionResult -> onPermissionResult(action.granted, action.canAskAgain)
             is UiAction.PermissionRechecked -> onPermissionRechecked(action.granted)
+            is UiAction.Call -> call(action.dataIds)
+            is UiAction.PickCall -> pickCall(action.option)
+            is UiAction.CallPermissionResult -> onCallPermissionResult(action.granted, action.canAskAgain)
+            UiAction.DismissCall -> status.update { it.copy(call = null) }
+            UiAction.CallFailed -> {
+                status.update { it.copy(call = null) }
+                eventChannel.trySend(UiEvent.CallFailed)
+            }
+            // The UI opens the settings itself.
+            UiAction.OpenAppSettings -> Unit
         }
     }
 
@@ -386,6 +400,64 @@ class MainViewModel(
 
     // endregion
 
+    // region Calling
+
+    /**
+     * Looks up the ways to call the number stored as [dataIds]. A single way (the phone app or
+     * another app) starts right away; otherwise the user picks. Nothing to call with is reported
+     * like a failed call. A newer tap replaces a lookup still running.
+     */
+    private fun call(dataIds: List<Long>) {
+        val data = loaded.value ?: return
+        val entry = data.entries.firstOrNull { it.dataId in dataIds } ?: return
+        callJob?.cancel()
+        callJob = viewModelScope.launch {
+            val region = settings.config.first().countryIso
+            val options = contacts.callOptions(entry, region)
+            if (options.isEmpty()) {
+                eventChannel.trySend(UiEvent.CallFailed)
+                return@launch
+            }
+            val request = options.singleOrNull()?.let(::startRequest) ?: CallRequest.Choose(
+                name = entry.displayName,
+                number = if (entry.isValid) entry.formattedNumber else entry.originalNumber,
+                options = options,
+            )
+            status.update { it.copy(call = request) }
+        }
+    }
+
+    private fun pickCall(option: CallOption) {
+        status.update { if (it.call is CallRequest.Choose) it.copy(call = startRequest(option)) else it }
+    }
+
+    /** Starts [option], first asking for the call permission if its app needs it. */
+    private fun startRequest(option: CallOption): CallRequest =
+        if (option is CallOption.App && option.needsCallPermission) {
+            CallRequest.RequestPermission(option)
+        } else {
+            CallRequest.Launch(option)
+        }
+
+    /**
+     * Starts the call once allowed. Refused, the app's chat with the contact opens instead, where
+     * the user can still call; an app without one is explained in a Snackbar.
+     */
+    private fun onCallPermissionResult(granted: Boolean, canAskAgain: Boolean) {
+        val option = (status.value.call as? CallRequest.RequestPermission)?.option ?: return
+        val next = when {
+            granted -> CallRequest.Launch(option)
+            option.chat != null -> CallRequest.OpenChat(option.chat)
+            else -> null
+        }
+        status.update { it.copy(call = next) }
+        if (next == null) {
+            eventChannel.trySend(UiEvent.CallPermissionDenied(option.label, permanently = !canAskAgain))
+        }
+    }
+
+    // endregion
+
     // region Permission
 
     private fun onPermissionResult(granted: Boolean, canAskAgain: Boolean) {
@@ -416,6 +488,7 @@ class MainViewModel(
     private fun onPermissionLost() {
         val wasGranted = status.value.permission == PermissionStatus.Granted
         loadJob?.cancel()
+        callJob?.cancel()
         loaded.value = null
         selection.value = emptySet()
         status.update {
@@ -424,6 +497,7 @@ class MainViewModel(
                 isLoading = false,
                 isRefreshing = false,
                 loadError = false,
+                call = null,
             )
         }
         if (wasGranted) eventChannel.trySend(UiEvent.PermissionRevoked)

@@ -106,6 +106,7 @@ fun ContactList(
                     selection = state.selection,
                     onToggleEntries = { onAction(UiAction.ToggleEntries(it)) },
                     onToggleContact = { id, ids -> onAction(UiAction.ToggleContact(id, ids)) },
+                    onCall = { onAction(UiAction.Call(it.dataIds)) },
                     modifier = Modifier
                         .widthIn(max = MaxContentWidth)
                         .animateItem(),

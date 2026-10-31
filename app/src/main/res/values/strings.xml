@@ -47,7 +47,7 @@
     <string name="permission_denied_hint">Next, Android will ask for access. Choose Allow.</string>
     <!-- Shown when the system dialog will not appear again. -->
     <string name="permission_permanently_denied">Contacts access was denied. Enable it in Settings &gt; Permissions.</string>
-    <string name="permission_footnote">TidyDial only reads and edits phone numbers.</string>
+    <string name="permission_footnote">TidyDial only changes phone numbers.</string>
 
     <!-- ===== Contacts list ===== -->
     <plurals name="list_summary_need_formatting">
@@ -92,6 +92,8 @@
     <string name="list_number_will_become">%1$s, %2$s, %3$s will become %4$s</string>
     <string name="list_number_invalid_description">%1$s, %2$s, %3$s, invalid number</string>
     <string name="list_number_formatted_description">%1$s, %2$s, %3$s, already formatted</string>
+    <!-- Call button of a number row, for TalkBack; %1$s is the number, e.g. "Call +1 212-555-0123". -->
+    <string name="list_number_call">Call %1$s</string>
 
     <!-- Empty states -->
     <string name="list_empty_title">No phone numbers yet</string>
@@ -174,6 +176,21 @@
     <string name="list_snackbar_permission_revoked">Contacts access was turned off</string>
     <!-- The undo record could not be written (for example, the storage is full), so the update did not start. -->
     <string name="list_snackbar_journal_failed">Couldn’t save the undo record, so nothing was changed. Free up some storage and try again.</string>
+    <!-- The phone app or the app picked for a call could not be opened. -->
+    <string name="list_snackbar_call_failed">No app could start this call</string>
+    <!-- The call permission was refused, and the app has no chat to open instead. %1$s is an app name such as WhatsApp. -->
+    <string name="list_snackbar_call_permission">Calling through %1$s needs permission to make phone calls</string>
+    <!-- Snackbar action that opens TidyDial's page in system settings. -->
+    <string name="list_snackbar_settings">Settings</string>
+
+    <!-- ===== Calling ===== -->
+    <!-- Title of the sheet that asks how to call; %1$s is the contact name. -->
+    <string name="call_sheet_title">Call %1$s</string>
+    <string name="call_option_phone">Phone</string>
+    <string name="call_option_phone_summary">Opens your phone app</string>
+    <!-- Under an app name such as WhatsApp or Signal. -->
+    <string name="call_option_voice">Voice call</string>
+    <string name="call_option_video">Video call</string>
 
     <!-- ===== Format options, country picker, about ===== -->
     <string name="options_subtitle">Changes show up in the list first. Your contacts are only edited when you tap Update.</string>

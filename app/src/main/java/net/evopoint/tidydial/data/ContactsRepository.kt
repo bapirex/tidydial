@@ -4,8 +4,12 @@ import android.Manifest
 import android.accounts.AccountManager
 import android.content.ContentProviderOperation
 import android.content.Context
+import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.database.Cursor
+import android.os.Build
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.ContactsContract.Data
@@ -20,6 +24,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import net.evopoint.tidydial.R
 import net.evopoint.tidydial.model.AccountInfo
+import net.evopoint.tidydial.model.AppChat
+import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.PhoneEntry
 import java.text.Collator
@@ -79,6 +85,16 @@ interface ContactsDataSource {
         journal: List<JournalEntry>,
         onProgress: ProgressCallback = { _, _ -> },
     ): UpdateResult
+
+    /**
+     * Ways to call [entry]'s number: the phone app first (when the device has one), then the voice
+     * and video calls other apps added to the contact for that number, by app name. Reads every
+     * account, including skipped ones, and only offers calls TidyDial is allowed to start, or may
+     * start once it holds CALL_PHONE (those also carry the app's chat for the number). Never
+     * fails: without contacts access it is the phone app alone, and it is empty when nothing can
+     * call. [regionIso] reads numbers without a country code.
+     */
+    suspend fun callOptions(entry: PhoneEntry, regionIso: String): List<CallOption>
 }
 
 class AndroidContactsRepository(
@@ -126,6 +142,27 @@ class AndroidContactsRepository(
     ): UpdateResult {
         val changes = journal.map { JournalEntry(it.dataId, before = it.after, after = it.before) }
         return execute(changes, onProgress)
+    }
+
+    override suspend fun callOptions(entry: PhoneEntry, regionIso: String): List<CallOption> {
+        // Tablets without telephony may have no phone app at all.
+        val phone = listOfNotNull(
+            CallOption.Phone(entry.originalNumber).takeIf { appContext.packageManager.canDial(it) },
+        )
+        if (!hasPermission(Manifest.permission.READ_CONTACTS)) return phone
+        val apps = try {
+            withContext(ioDispatcher) {
+                val numbers = listOf(entry.originalNumber, entry.formattedNumber).distinct()
+                resolveCalls(callRowsFor(queryCallData(entry.contactId), numbers, regionIso, formatter))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Dialling needs no permission, so the phone app is still offered.
+            Log.w(TAG, "Could not look up call apps", e)
+            emptyList()
+        }
+        return phone + apps
     }
 
     private fun hasPermission(permission: String): Boolean =
@@ -191,13 +228,16 @@ class AndroidContactsRepository(
         resolver.query(Phone.CONTENT_URI, PROJECTION, null, null, SORT_ORDER)
     }
 
-    private fun queryRawContactAccountTypes(): Map<Long, String> {
+    private fun queryRawContactAccountTypes(
+        selection: String? = null,
+        selectionArgs: Array<String>? = null,
+    ): Map<Long, String> {
         val map = HashMap<Long, String>()
         resolver.query(
             RawContacts.CONTENT_URI,
             arrayOf(RawContacts._ID, RawContacts.ACCOUNT_TYPE),
-            null,
-            null,
+            selection,
+            selectionArgs,
             null,
         )?.use { c ->
             val idIdx = c.getColumnIndexOrThrow(RawContacts._ID)
@@ -277,6 +317,128 @@ class AndroidContactsRepository(
             else -> authenticatorLabels[type]
                 ?: KNOWN_ACCOUNT_LABELS[type]
                 ?: labelFromAccountType(type)
+        }
+
+    // endregion
+
+    // region Call options
+
+    /** The phone, known call and chat rows of [contactId], from every account, oldest first. */
+    private fun queryCallData(contactId: Long): List<ContactDataRow> {
+        val args = arrayOf(contactId.toString(), Phone.CONTENT_ITEM_TYPE) +
+            CallMimeTypes.KNOWN.keys + CallMimeTypes.CHATS.keys + CallMimeTypes.THREEMA_LIKE
+        val query = { projection: Array<String> ->
+            resolver.query(Data.CONTENT_URI, projection, CALL_DATA_SELECTION, args, Data._ID)
+        }
+        val cursor = try {
+            query(CALL_DATA_PROJECTION_WITH_ACCOUNT)
+        } catch (e: IllegalArgumentException) {
+            query(CALL_DATA_PROJECTION)
+        } ?: return emptyList()
+        val rows = ArrayList<ContactDataRow>()
+        var hasAccountColumn = true
+        cursor.use { c ->
+            val idIdx = c.getColumnIndexOrThrow(Data._ID)
+            val rawIdx = c.getColumnIndex(Data.RAW_CONTACT_ID)
+            val mimeIdx = c.getColumnIndexOrThrow(Data.MIMETYPE)
+            val accountIdx = c.getColumnIndex(RawContacts.ACCOUNT_TYPE)
+            val data1Idx = c.getColumnIndex(Data.DATA1)
+            val data3Idx = c.getColumnIndex(Data.DATA3)
+            hasAccountColumn = accountIdx >= 0
+            while (c.moveToNext()) {
+                rows += ContactDataRow(
+                    dataId = c.getLong(idIdx),
+                    rawContactId = c.longAt(rawIdx),
+                    mimeType = c.stringAt(mimeIdx) ?: continue,
+                    accountType = c.stringAt(accountIdx).orEmpty(),
+                    data1 = c.stringAt(data1Idx),
+                    data3 = c.stringAt(data3Idx),
+                )
+            }
+        }
+        if (hasAccountColumn) return rows
+        val accounts = queryRawContactAccountTypes("${RawContacts.CONTACT_ID} = ?", arrayOf(contactId.toString()))
+        return rows.map { row ->
+            val account = accounts[row.rawContactId].orEmpty()
+            ContactDataRow(row.dataId, row.rawContactId, row.mimeType, account, row.data1, row.data3)
+        }
+    }
+
+    /**
+     * Keeps the calls an activity can start for TidyDial: exactly one handler (in the app that
+     * owns the row's account, when known), exported and not guarded by a permission TidyDial
+     * lacks. Most messaging apps guard their call activity with CALL_PHONE; those calls are kept,
+     * since TidyDial asks for it when one is picked, together with the app's chat to open instead.
+     */
+    private fun resolveCalls(calls: List<CallRow>): List<CallOption.App> {
+        if (calls.isEmpty()) return emptyList()
+        val packageManager = appContext.packageManager
+        val packages = authenticatorPackages()
+        val labels by lazy { authenticatorLabels() }
+        val collator = Collator.getInstance()
+        return calls
+            .mapNotNull { call ->
+                val row = call.row
+                val activity = packageManager.handler(row, packages[row.accountType])
+                    ?.takeIf { canStart(it) }
+                    ?: return@mapNotNull null
+                // loadLabel falls back to the package name, which is no name to show.
+                val label = activity.applicationInfo?.loadLabel(packageManager)?.toString()
+                    ?.takeIf { it.isNotBlank() && it != activity.packageName }
+                    ?: accountLabel(row.accountType, labels)
+                val needsCallPermission = activity.permission == Manifest.permission.CALL_PHONE
+                // The chat must open in the same app, and without the call permission.
+                val chat = call.chat.takeIf { needsCallPermission }?.let { chat ->
+                    packageManager.handler(chat, activity.packageName)
+                        ?.takeIf { canStart(it) && it.permission != Manifest.permission.CALL_PHONE }
+                        ?.let { AppChat(it.packageName, it.name, chat.dataId, chat.mimeType) }
+                }
+                CallOption.App(
+                    label = label,
+                    isVideo = call.isVideo,
+                    packageName = activity.packageName,
+                    activityName = activity.name,
+                    dataId = row.dataId,
+                    mimeType = row.mimeType,
+                    needsCallPermission = needsCallPermission,
+                    chat = chat,
+                )
+            }
+            .distinctBy { it.packageName to it.isVideo }
+            .sortedWith(compareBy<CallOption.App, String>(collator) { it.label }.thenBy { it.isVideo })
+    }
+
+    /** The only activity that opens [row], in [packageName] when known. */
+    private fun PackageManager.handler(row: ContactDataRow, packageName: String?): ActivityInfo? {
+        val intent = appCallIntent(row.dataId, row.mimeType)
+        packageName?.let(intent::setPackage)
+        return defaultActivities(intent).singleOrNull()?.activityInfo
+    }
+
+    /** Exported, and guarded by no permission TidyDial lacks but CALL_PHONE, asked for on use. */
+    private fun canStart(activity: ActivityInfo): Boolean {
+        val permission = activity.permission
+        return activity.exported &&
+            (permission == null || permission == Manifest.permission.CALL_PHONE || hasPermission(permission))
+    }
+
+    /** Account type to the package of the app that owns it; may be empty if none is visible. */
+    private fun authenticatorPackages(): Map<String, String> = try {
+        AccountManager.get(appContext).authenticatorTypes.associate { it.type to it.packageName }
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    private fun PackageManager.canDial(phone: CallOption.Phone): Boolean =
+        defaultActivities(phone.toIntent()).isNotEmpty()
+
+    private fun PackageManager.defaultActivities(intent: Intent): List<ResolveInfo> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val flags = PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+            queryIntentActivities(intent, flags)
+        } else {
+            @Suppress("DEPRECATION")
+            queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
         }
 
     // endregion
@@ -428,6 +590,19 @@ class AndroidContactsRepository(
 
         val SORT_ORDER =
             "${Phone.DISPLAY_NAME_PRIMARY} COLLATE LOCALIZED ASC, ${Phone.CONTACT_ID} ASC, ${Phone._ID} ASC"
+
+        val CALL_DATA_PROJECTION = arrayOf(
+            Data._ID,
+            Data.RAW_CONTACT_ID,
+            Data.MIMETYPE,
+            Data.DATA1,
+            Data.DATA3,
+        )
+        val CALL_DATA_PROJECTION_WITH_ACCOUNT = CALL_DATA_PROJECTION + RawContacts.ACCOUNT_TYPE
+
+        val CALL_DATA_SELECTION = "${Data.CONTACT_ID} = ? AND (${Data.MIMETYPE} IN (" +
+            List(CallMimeTypes.KNOWN.size + CallMimeTypes.CHATS.size + 1) { "?" }.joinToString() +
+            ") OR ${Data.MIMETYPE} LIKE ?)"
 
         val OPTIMISTIC_SELECTION =
             "${Data._ID} = ? AND ${Data.MIMETYPE} = ? AND ${Phone.NUMBER} = ?"

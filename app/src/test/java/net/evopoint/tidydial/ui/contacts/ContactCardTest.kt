@@ -2,6 +2,7 @@ package net.evopoint.tidydial.ui.contacts
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -16,6 +17,7 @@ import net.evopoint.tidydial.ui.UiState
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -96,5 +98,40 @@ class ContactCardTest {
         ).assertExists()
         composeRule.onNodeWithContentDescription("Work, Google, +1 310-555-0145, already formatted")
             .assertExists()
+    }
+
+    @Test
+    fun callButtonIsItsOwnControlAndDoesNotToggle() {
+        setList(SampleData.uiState(entries = SampleData.mostlyTidyEntries, selection = setOf(1301L, 1302L)))
+
+        val call = composeRule.onNodeWithContentDescription("Call +1 415-555-0133")
+        call.assertHasClickAction()
+        call.performClick()
+
+        // One call for the merged number; the row's checkbox state is untouched.
+        assertEquals(listOf(UiAction.Call(listOf(1301L, 1302L))), actions)
+        composeRule.onNodeWithContentDescription(
+            "Mobile, Google and Google Meet, 4155550133 will become +1 415-555-0133",
+        ).assertIsOn()
+    }
+
+    @Test
+    fun everyKindOfRowHasACallButton() {
+        setList(SampleData.uiState(filter = ContactFilter.ALL))
+        // Tidy, changing (named by the formatted number) and invalid (as stored).
+        composeRule.onNodeWithContentDescription("Call +1 415-555-0132").assertHasClickAction()
+        composeRule.onNodeWithContentDescription("Call +1 212-555-0101").assertHasClickAction()
+        composeRule.onNodeWithContentDescription("Call 555-01").performClick()
+        assertEquals(listOf(UiAction.Call(listOf(401L))), actions)
+    }
+
+    @Test
+    fun callButtonIsAMinimumTouchTarget() {
+        setList(SampleData.uiState(entries = SampleData.tidyEntries, selection = emptySet()))
+        // The 40dp button reserves room for a 48dp touch target around it.
+        val bounds = composeRule.onNodeWithContentDescription("Call +1 646-555-0144")
+            .fetchSemanticsNode().touchBoundsInRoot
+        val min = with(composeRule.density) { 48.dp.toPx() }
+        assertTrue("touch target ${bounds.size}", bounds.width >= min - 1 && bounds.height >= min - 1)
     }
 }

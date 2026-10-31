@@ -1,5 +1,11 @@
 package net.evopoint.tidydial.ui.contacts
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -47,6 +53,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
@@ -57,7 +64,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
+import net.evopoint.tidydial.data.toIntent
 import net.evopoint.tidydial.model.NumberFormatStyle
+import net.evopoint.tidydial.ui.CallRequest
 import net.evopoint.tidydial.ui.UiAction
 import net.evopoint.tidydial.ui.UiEvent
 import net.evopoint.tidydial.ui.UiState
@@ -78,7 +87,7 @@ private val CompactHeaderHeight = 600.dp
 /**
  * Main screen: collapsing app bar with search and filters, the grouped contact list with
  * pull-to-refresh, the floating update toolbar, and the confirm / progress / Snackbar flow.
- * Hosts the format options and about sheets.
+ * Hosts the format options, about and call sheets.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -183,6 +192,58 @@ fun ContactsScreen(
     }
     if (showAbout) {
         AboutSheet(onDismiss = { showAbout = false })
+    }
+    state.call?.let { CallRequestHandler(it, onAction) }
+}
+
+/**
+ * Opens the call right away, first asks which app to call with, or asks for the call permission
+ * an app needs (then opens its chat if that was refused).
+ */
+@Composable
+private fun CallRequestHandler(request: CallRequest, onAction: (UiAction) -> Unit) {
+    val context = LocalContext.current
+    val start = { intent: Intent ->
+        onAction(if (context.startCall(intent)) UiAction.DismissCall else UiAction.CallFailed)
+    }
+    when (request) {
+        is CallRequest.Launch -> LaunchedEffect(request) { start(request.option.toIntent()) }
+        is CallRequest.OpenChat -> LaunchedEffect(request) { start(request.chat.toIntent()) }
+        is CallRequest.RequestPermission -> CallPermissionRequest(request, onAction)
+        is CallRequest.Choose -> CallOptionsSheet(
+            request = request,
+            onSelect = { onAction(UiAction.PickCall(it)) },
+            onDismiss = { onAction(UiAction.DismissCall) },
+        )
+    }
+}
+
+/**
+ * Asks for CALL_PHONE, unless it is granted already, and reports the answer. Asks once per
+ * request: not again when the activity is recreated while the system dialog is up. The pending
+ * call lives only in the ViewModel, so if the process dies meanwhile the answer is dropped and
+ * the user taps call again (like the rest of the app, nothing survives process death).
+ */
+@Composable
+private fun CallPermissionRequest(request: CallRequest.RequestPermission, onAction: (UiAction) -> Unit) {
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    val currentOnAction by rememberUpdatedState(onAction)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        // After a denial, the system only shows the dialog again while a rationale is expected.
+        val canAskAgain = activity?.shouldShowRequestPermissionRationale(Manifest.permission.CALL_PHONE) ?: true
+        currentOnAction(UiAction.CallPermissionResult(granted = granted, canAskAgain = canAskAgain))
+    }
+    var asked by rememberSaveable(request) { mutableStateOf(false) }
+    LaunchedEffect(request) {
+        if (asked) return@LaunchedEffect
+        asked = true
+        val granted = context.checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            currentOnAction(UiAction.CallPermissionResult(granted = true, canAskAgain = true))
+        } else {
+            launcher.launch(Manifest.permission.CALL_PHONE)
+        }
     }
 }
 

@@ -7,6 +7,7 @@
 <li>Your numbers are grouped by contact, and each one shows its current and new form. Filter by changes, selection or invalid numbers, or search by name or number.</li>
 <li>Choose exactly which numbers to update, then confirm. Only the phone number field is changed. Names, photos and everything else stay as they are.</li>
 <li>Undo the last update, even after restarting the app.</li>
+<li>Tap the call button next to a number to open your phone app with the number filled in, or to call through another app that offers it.</li>
 </ul>
 
 <p><b>Careful by default</b></p>
@@ -29,6 +30,7 @@
 <ul>
 <li>Read contacts: to list your phone numbers and show how they would be formatted.</li>
 <li>Write contacts: to save the numbers you choose to update, and to restore them when you undo.</li>
+<li>Make phone calls: only requested when you choose to call through another app such as WhatsApp. Regular calls open your phone app.</li>
 </ul>
 <p>These are the only permissions TidyDial asks you for.</p>
 

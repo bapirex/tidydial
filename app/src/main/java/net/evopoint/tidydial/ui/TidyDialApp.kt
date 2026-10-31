@@ -38,7 +38,8 @@ private enum class Route { Blank, Permission, Contacts }
 
 /**
  * Root composable: owns the contacts permission flow and switches between the permission
- * explainer and the contacts list.
+ * explainer and the contacts list. The call permission is asked for by the contacts screen, only
+ * when a call needs it.
  */
 @Composable
 fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
@@ -86,7 +87,13 @@ fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 Route.Contacts -> ContactsScreen(
                     state = state,
                     events = viewModel.events,
-                    onAction = viewModel::onAction,
+                    onAction = { action ->
+                        when (action) {
+                            // From the Snackbar after the call permission was permanently denied.
+                            UiAction.OpenAppSettings -> context.openAppSettings()
+                            else -> viewModel.onAction(action)
+                        }
+                    },
                     exampleNumber = viewModel::exampleNumber,
                 )
             }

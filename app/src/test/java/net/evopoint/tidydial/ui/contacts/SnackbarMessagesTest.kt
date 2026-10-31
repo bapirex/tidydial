@@ -71,4 +71,27 @@ class SnackbarMessagesTest {
         val spec = UiEvent.LoadFailed.toSnackbarSpec(resources)
         assertEquals(UiAction.Refresh, spec.action)
     }
+
+    @Test
+    fun failedCallSaysNoAppCouldStartIt() {
+        val spec = UiEvent.CallFailed.toSnackbarSpec(resources)
+        assertEquals("No app could start this call", spec.message)
+        assertNull(spec.action)
+    }
+
+    @Test
+    fun refusedCallPermissionNamesTheApp() {
+        val spec = UiEvent.CallPermissionDenied("Signal", permanently = false).toSnackbarSpec(resources)
+        assertEquals("Calling through Signal needs permission to make phone calls", spec.message)
+        assertNull(spec.action)
+    }
+
+    @Test
+    fun permanentlyRefusedCallPermissionOffersSettings() {
+        val spec = UiEvent.CallPermissionDenied("Signal", permanently = true).toSnackbarSpec(resources)
+        assertEquals("Calling through Signal needs permission to make phone calls", spec.message)
+        assertEquals("Settings", spec.actionLabel)
+        assertEquals(UiAction.OpenAppSettings, spec.action)
+        assertEquals(SnackbarDuration.Long, spec.duration)
+    }
 }

@@ -29,6 +29,8 @@ import net.evopoint.tidydial.data.ProgressCallback
 import net.evopoint.tidydial.data.SettingsRepository
 import net.evopoint.tidydial.data.UndoJournal
 import net.evopoint.tidydial.data.UpdateResult
+import net.evopoint.tidydial.model.AppChat
+import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
 import net.evopoint.tidydial.model.PhoneEntry
@@ -753,6 +755,312 @@ class MainViewModelTest {
 
     // endregion
 
+    // region Calling
+
+    private val whatsAppVoice = CallOption.App(
+        label = "WhatsApp",
+        isVideo = false,
+        packageName = "org.example.whatsapp",
+        activityName = "org.example.CallActivity",
+        dataId = 9001,
+        mimeType = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call",
+    )
+
+    /** A call whose activity needs CALL_PHONE, with the app's chat to fall back to. */
+    private val guardedVoice = CallOption.App(
+        label = "Signal",
+        isVideo = false,
+        packageName = "org.example.signal",
+        activityName = "org.example.signal.CallActivity",
+        dataId = 9002,
+        mimeType = "vnd.android.cursor.item/vnd.org.thoughtcrime.securesms.call",
+        needsCallPermission = true,
+        chat = AppChat(
+            packageName = "org.example.signal",
+            activityName = "org.example.signal.ChatActivity",
+            dataId = 9003,
+            mimeType = "vnd.android.cursor.item/vnd.org.thoughtcrime.securesms.contact",
+        ),
+    )
+
+    @Test
+    fun callWithOnlyThePhoneAppDialsDirectly() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.Call(listOf(601L)))
+        advanceUntilIdle()
+
+        // The number as stored, not the formatted one the list shows.
+        assertEquals(CallRequest.Launch(CallOption.Phone("6175550199")), viewModel.ui.call)
+        assertEquals("US", contacts.callLookups.single().second)
+    }
+
+    @Test
+    fun callWithOtherAppsAsksHowToCall() = runTest(dispatcher) {
+        contacts.callApps = listOf(whatsAppVoice)
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        assertEquals(
+            CallRequest.Choose(
+                name = "Avery Sample",
+                number = "+1 212-555-0101",
+                options = listOf(CallOption.Phone("2125550101"), whatsAppVoice),
+            ),
+            viewModel.ui.call,
+        )
+    }
+
+    @Test
+    fun invalidNumberIsShownAsStored() = runTest(dispatcher) {
+        contacts.callApps = listOf(whatsAppVoice)
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.Call(listOf(401L)))
+        advanceUntilIdle()
+
+        assertEquals("555-01", (viewModel.ui.call as CallRequest.Choose).number)
+    }
+
+    @Test
+    fun callLeavesTheSelectionAlone() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        val before = viewModel.ui.selection
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        assertEquals(before, viewModel.ui.selection)
+    }
+
+    @Test
+    fun newerTapReplacesARunningLookup() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        contacts.callGate = CompletableDeferred()
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+        viewModel.onAction(UiAction.Call(listOf(301L)))
+        advanceUntilIdle()
+        contacts.callGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(2, contacts.callLookups.size)
+        assertEquals(CallRequest.Launch(CallOption.Phone("+1 415-555-0132")), viewModel.ui.call)
+    }
+
+    @Test
+    fun dismissClearsTheCall() = runTest(dispatcher) {
+        contacts.callApps = listOf(whatsAppVoice)
+        val viewModel = grantedViewModel()
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.DismissCall)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun failedCallClearsAndNotifies() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.Call(listOf(601L)))
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.CallFailed)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+        assertEquals(listOf(UiEvent.CallFailed), events)
+    }
+
+    @Test
+    fun singleAppWithoutAPhoneAppStartsDirectly() = runTest(dispatcher) {
+        contacts.canDial = false
+        contacts.callApps = listOf(whatsAppVoice)
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.Launch(whatsAppVoice), viewModel.ui.call)
+    }
+
+    @Test
+    fun singleAppThatNeedsTheCallPermissionAsksForItDirectly() = runTest(dispatcher) {
+        contacts.canDial = false
+        contacts.callApps = listOf(guardedVoice)
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.RequestPermission(guardedVoice), viewModel.ui.call)
+    }
+
+    @Test
+    fun pickingAnAppWithoutAPermissionStartsIt() = runTest(dispatcher) {
+        val viewModel = choosing(whatsAppVoice, guardedVoice)
+
+        viewModel.onAction(UiAction.PickCall(whatsAppVoice))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.Launch(whatsAppVoice), viewModel.ui.call)
+    }
+
+    @Test
+    fun pickingTheGuardedAppAsksForTheCallPermission() = runTest(dispatcher) {
+        val viewModel = choosing(whatsAppVoice, guardedVoice)
+
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.RequestPermission(guardedVoice), viewModel.ui.call)
+    }
+
+    @Test
+    fun pickingThePhoneAppDials() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+
+        viewModel.onAction(UiAction.PickCall(CallOption.Phone("2125550101")))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.Launch(CallOption.Phone("2125550101")), viewModel.ui.call)
+    }
+
+    @Test
+    fun grantedCallPermissionStartsTheCall() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = true, canAskAgain = true))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.Launch(guardedVoice), viewModel.ui.call)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun refusedCallPermissionOpensTheChat() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = true))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.OpenChat(guardedVoice.chat!!), viewModel.ui.call)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun permanentlyRefusedCallPermissionStillOpensTheChat() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = false))
+        advanceUntilIdle()
+
+        assertEquals(CallRequest.OpenChat(guardedVoice.chat!!), viewModel.ui.call)
+    }
+
+    @Test
+    fun refusedCallPermissionWithoutAChatIsExplained() = runTest(dispatcher) {
+        val noChat = guardedVoice.copy(chat = null)
+        val viewModel = choosing(noChat)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(noChat))
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = true))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+        assertEquals(listOf(UiEvent.CallPermissionDenied("Signal", permanently = false)), events)
+    }
+
+    @Test
+    fun permanentlyRefusedCallPermissionWithoutAChatPointsToSettings() = runTest(dispatcher) {
+        val noChat = guardedVoice.copy(chat = null)
+        val viewModel = choosing(noChat)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.PickCall(noChat))
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = false))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+        assertEquals(listOf(UiEvent.CallPermissionDenied("Signal", permanently = true)), events)
+    }
+
+    @Test
+    fun callPermissionResultWithoutARequestIsIgnored() = runTest(dispatcher) {
+        val viewModel = choosing(guardedVoice)
+        val events = collectEvents(viewModel)
+        val choice = viewModel.ui.call
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = false))
+        advanceUntilIdle()
+
+        assertEquals(choice, viewModel.ui.call)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun pickWithoutAChoiceIsIgnored() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+
+        viewModel.onAction(UiAction.PickCall(guardedVoice))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+    }
+
+    /** Avery's first number, with the sheet asking how to call it with the phone app and [apps]. */
+    private fun TestScope.choosing(vararg apps: CallOption.App): MainViewModel {
+        contacts.callApps = apps.toList()
+        val viewModel = grantedViewModel()
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+        assertTrue(viewModel.ui.call is CallRequest.Choose)
+        return viewModel
+    }
+
+    @Test
+    fun nothingToCallWithIsReported() = runTest(dispatcher) {
+        contacts.canDial = false
+        val viewModel = grantedViewModel()
+        val events = collectEvents(viewModel)
+
+        viewModel.onAction(UiAction.Call(listOf(601L)))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+        assertEquals(listOf(UiEvent.CallFailed), events)
+    }
+
+    @Test
+    fun revokedPermissionDropsThePendingCall() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        contacts.callGate = CompletableDeferred()
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.PermissionRechecked(granted = false))
+        contacts.callGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.call)
+    }
+
+    // endregion
+
     private class InMemoryPreferences : DataStore<Preferences> {
         private val state = MutableStateFlow(emptyPreferences())
         override val data: Flow<Preferences> = state
@@ -788,6 +1096,12 @@ class MainViewModelTest {
         var lastConfig: FormatConfig? = null
         val progressKinds = mutableListOf<ProgressKind>()
 
+        /** Apps offered besides the phone app; [callGate] holds the lookup until completed. */
+        var callApps: List<CallOption.App> = emptyList()
+        var canDial = true
+        var callGate: CompletableDeferred<Unit>? = null
+        val callLookups = mutableListOf<Pair<PhoneEntry, String>>()
+
         override suspend fun load(config: FormatConfig): LoadResult {
             loadCalls++
             lastConfig = config
@@ -821,6 +1135,12 @@ class MainViewModelTest {
 
         override suspend fun restore(journal: List<JournalEntry>, onProgress: ProgressCallback): UpdateResult =
             write(journal.map { JournalEntry(it.dataId, it.after, it.before) }, onProgress)
+
+        override suspend fun callOptions(entry: PhoneEntry, regionIso: String): List<CallOption> {
+            callLookups += entry to regionIso
+            callGate?.await()
+            return listOfNotNull(CallOption.Phone(entry.originalNumber).takeIf { canDial }) + callApps
+        }
 
         /** Every number counts as already formatted from now on. */
         fun formatEverything() {

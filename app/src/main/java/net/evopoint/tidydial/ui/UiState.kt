@@ -1,6 +1,8 @@
 package net.evopoint.tidydial.ui
 
 import net.evopoint.tidydial.model.AccountInfo
+import net.evopoint.tidydial.model.AppChat
+import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.ContactGroup
 import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.FormatConfig
@@ -55,6 +57,31 @@ data class EntryCounts(
     }
 }
 
+/** A call started from a number row, once the ways to call it are known. */
+sealed interface CallRequest {
+    /** Start [option]: the only way to call, the one picked, or one now allowed. */
+    data class Launch(val option: CallOption) : CallRequest
+
+    /**
+     * [option] only starts for apps that hold CALL_PHONE: ask for it unless it is granted already,
+     * and report with [UiAction.CallPermissionResult].
+     */
+    data class RequestPermission(val option: CallOption.App) : CallRequest
+
+    /** The call permission was refused: open the app's [chat] with the contact instead. */
+    data class OpenChat(val chat: AppChat) : CallRequest
+
+    /**
+     * Ask how to call [number] (as shown in the list) of [name]: [options] starts with the phone
+     * app (unless the device has none), followed by other apps.
+     */
+    data class Choose(
+        val name: String,
+        val number: String,
+        val options: List<CallOption>,
+    ) : CallRequest
+}
+
 /**
  * Everything the UI renders.
  *
@@ -72,6 +99,9 @@ data class EntryCounts(
  * @property countries all supported countries sorted by localized name (empty until computed).
  * @property progress non-null while an update or undo runs.
  * @property canUndo a journal of the last update exists.
+ * @property call a call to start, to choose an app for or to ask the call permission for; the UI
+ *   reports back with [UiAction.PickCall], [UiAction.CallPermissionResult], [UiAction.DismissCall]
+ *   or [UiAction.CallFailed].
  */
 data class UiState(
     val permission: PermissionStatus = PermissionStatus.Unknown,
@@ -89,6 +119,7 @@ data class UiState(
     val countries: List<Country> = emptyList(),
     val progress: UpdateProgress? = null,
     val canUndo: Boolean = false,
+    val call: CallRequest? = null,
 ) {
     val isUpdating: Boolean get() = progress != null
 
@@ -136,6 +167,15 @@ sealed interface UiEvent {
 
     /** Contacts access was lost (revoked in settings) while the app was running. */
     data object PermissionRevoked : UiEvent
+
+    /** No app could be opened for a call (none installed, or it refused). */
+    data object CallFailed : UiEvent
+
+    /**
+     * The call permission that [app] needs was refused, and it has no chat to open instead.
+     * [permanently]: the system will not ask again, only app settings can grant it.
+     */
+    data class CallPermissionDenied(val app: String, val permanently: Boolean) : UiEvent
 }
 
 sealed interface UiAction {
@@ -176,4 +216,22 @@ sealed interface UiAction {
 
     /** Permission state checked on resume (the user may have changed it in settings). */
     data class PermissionRechecked(val granted: Boolean) : UiAction
+
+    /** The call button of the number stored as [dataIds] was tapped. */
+    data class Call(val dataIds: List<Long>) : UiAction
+
+    /** [option] was picked in the sheet that asks how to call. */
+    data class PickCall(val option: CallOption) : UiAction
+
+    /** Answer to [CallRequest.RequestPermission]; [canAskAgain] as for [PermissionResult]. */
+    data class CallPermissionResult(val granted: Boolean, val canAskAgain: Boolean) : UiAction
+
+    /** The call was started, or the user closed the choice without calling. */
+    data object DismissCall : UiAction
+
+    /** The app picked for the call could not be opened. */
+    data object CallFailed : UiAction
+
+    /** Opens TidyDial's page in system settings; handled by the UI, not the ViewModel. */
+    data object OpenAppSettings : UiAction
 }

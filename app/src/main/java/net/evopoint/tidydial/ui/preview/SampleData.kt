@@ -1,11 +1,13 @@
 package net.evopoint.tidydial.ui.preview
 
 import net.evopoint.tidydial.model.AccountInfo
+import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.ContactGroup
 import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.PhoneEntry
 import net.evopoint.tidydial.model.groupByContact
+import net.evopoint.tidydial.ui.CallRequest
 import net.evopoint.tidydial.ui.ContactFilter
 import net.evopoint.tidydial.ui.EntryCounts
 import net.evopoint.tidydial.ui.MainViewModel
@@ -105,6 +107,21 @@ object SampleData {
         entries + gus.copy(dataId = 3999, accountType = MEET, accountLabel = "Google Meet")
     }.sortedBy { it.displayName }
 
+    /**
+     * Ways to call Dana's number: every kind of row the call sheet shows (the phone app, an app
+     * with a voice call only, an app with voice and video), sorted like the repository does.
+     */
+    val callChoice = CallRequest.Choose(
+        name = "Dana Testperson",
+        number = "+1 646-555-0144",
+        options = listOf(
+            CallOption.Phone("+1 646-555-0144"),
+            appCall("Threema", isVideo = false, dataId = 9401, mimeType = "vnd.ch.threema.app.call"),
+            appCall("WhatsApp", isVideo = false, dataId = 9402, mimeType = "vnd.com.whatsapp.voip.call"),
+            appCall("WhatsApp", isVideo = true, dataId = 9403, mimeType = "vnd.com.whatsapp.video.call"),
+        ),
+    )
+
     /** Ids the app pre-selects after a load: every valid number that would change. */
     val defaultSelection: Set<Long> = entries.filter { it.isSelectable }.map { it.dataId }.toSet()
 
@@ -150,6 +167,16 @@ object SampleData {
         countries = countries,
         progress = progress,
         canUndo = canUndo,
+    )
+
+    /** An app call; the package is made up, so previews and tests show the fallback icon. */
+    private fun appCall(label: String, isVideo: Boolean, dataId: Long, mimeType: String) = CallOption.App(
+        label = label,
+        isVideo = isVideo,
+        packageName = "org.example.${label.lowercase(Locale.ROOT)}",
+        activityName = "org.example.CallActivity",
+        dataId = dataId,
+        mimeType = "vnd.android.cursor.item/$mimeType",
     )
 
     private fun entry(
