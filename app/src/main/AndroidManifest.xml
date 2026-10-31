@@ -31,7 +31,9 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
+            <!-- The authority matters: WhatsApp's filter names it, and stays hidden otherwise. -->
             <data
+                android:host="com.android.contacts"
                 android:mimeType="vnd.android.cursor.item/*"
                 android:scheme="content" />
         </intent>

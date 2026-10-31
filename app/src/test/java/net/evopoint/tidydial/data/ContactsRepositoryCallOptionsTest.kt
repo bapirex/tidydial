@@ -253,6 +253,45 @@ class ContactsRepositoryCallOptionsTest {
     }
 
     @Test
+    fun appsThatOpenAnyTypeDoNotHideTheOwnersCall() = runTest {
+        provider.rows += listOf(
+            phone(1, raw = 140, "6465550144", "com.google"),
+            call(2, raw = 141, WA_VOICE, "16465550144@s.whatsapp.net", "com.whatsapp"),
+            call(3, raw = 145, MEET_MEET_AUDIO, "+1 646-555-0144", "com.google.android.apps.tachyon"),
+        )
+        // A text editor that declares it opens anything matches every row too.
+        handle(2, WA_VOICE, "org.example.whatsapp", label = "WhatsApp", filterType = ITEM + WA_VOICE)
+        handle(2, WA_VOICE, "org.example.editor", label = "Editor", filterType = "*/*")
+        handle(3, MEET_MEET_AUDIO, "org.example.editor", label = "Editor", filterType = "*/*")
+        handle(3, MEET_MEET_AUDIO, "org.example.meet", label = "Meet", filterType = ITEM + MEET_MEET_AUDIO)
+
+        assertEquals(
+            listOf(
+                CallOption.Phone("6465550144"),
+                app("Meet", false, "org.example.meet", 3, MEET_MEET_AUDIO),
+                app("WhatsApp", false, "org.example.whatsapp", 2, WA_VOICE),
+            ),
+            repository.callOptions(mobile, "US"),
+        )
+    }
+
+    @Test
+    fun theAccountsOwnAppWinsOverAnotherAppNamingTheSameType() = runTest {
+        provider.rows += listOf(
+            phone(1, raw = 140, "6465550144", "com.google"),
+            // Signal and a fork share the mimetype; the row's account is the fork's package.
+            call(2, raw = 142, SIGNAL_VOICE, "+16465550144", "org.example.fork"),
+        )
+        handle(2, SIGNAL_VOICE, "org.example.signal", label = "Signal", filterType = ITEM + SIGNAL_VOICE)
+        handle(2, SIGNAL_VOICE, "org.example.fork", label = "Fork", filterType = ITEM + SIGNAL_VOICE)
+
+        assertEquals(
+            listOf(CallOption.Phone("6465550144"), app("Fork", false, "org.example.fork", 2, SIGNAL_VOICE)),
+            repository.callOptions(mobile, "US"),
+        )
+    }
+
+    @Test
     fun withoutAPhoneAppOrContactsAccessNothingIsOffered() = runTest {
         shadowOf(app.packageManager).removeActivity(DIALER)
         shadowOf(app).denyPermissions(Manifest.permission.READ_CONTACTS)
@@ -281,10 +320,12 @@ class ContactsRepositoryCallOptionsTest {
         permission: String? = null,
         exported: Boolean = true,
         activity: String = "CallActivity",
+        filterType: String? = null,
     ) {
         // A chat is looked up in the app that handles the call, like an intent with a package.
         val chatPackage = packageName.takeIf { activity == CHAT_ACTIVITY }
         val info = ResolveInfo().apply {
+            filter = filterType?.let { type -> IntentFilter(Intent.ACTION_VIEW).apply { addDataType(type) } }
             activityInfo = ActivityInfo().apply {
                 this.packageName = packageName
                 name = "$packageName.$activity"
@@ -397,6 +438,7 @@ class ContactsRepositoryCallOptionsTest {
         const val TELEGRAM_VOICE = "vnd.org.telegram.messenger.android.call"
         const val MEET_AUDIO = "com.google.android.apps.tachyon.phone.audio"
         const val MEET_VIDEO = "com.google.android.apps.tachyon.phone"
+        const val MEET_MEET_AUDIO = "com.google.android.apps.tachyon.phone.meet.audio"
         const val CHAT_ACTIVITY = "ChatActivity"
         const val WA_CHAT = "vnd.com.whatsapp.profile"
         const val SIGNAL_CHAT = "vnd.org.thoughtcrime.securesms.contact"

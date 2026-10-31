@@ -55,6 +55,9 @@ internal object CallMimeTypes {
             CallMimeType(true, NumberColumn.DATA3_TEXT, TELEGRAM_CHAT),
         // Free Viber-to-Viber call; the Viber Out rows call phone lines for money.
         "${ITEM}vnd.com.viber.voip.viber_number_call" to CallMimeType(false, NumberColumn.DATA1),
+        // Google Meet; the ".meet" rows replaced Duo's, which older installs still have.
+        "${ITEM}com.google.android.apps.tachyon.phone.meet.audio" to CallMimeType(false, NumberColumn.DATA1),
+        "${ITEM}com.google.android.apps.tachyon.phone.meet" to CallMimeType(true, NumberColumn.DATA1),
         "${ITEM}com.google.android.apps.tachyon.phone.audio" to CallMimeType(false, NumberColumn.DATA1),
         "${ITEM}com.google.android.apps.tachyon.phone" to CallMimeType(true, NumberColumn.DATA1),
     )
