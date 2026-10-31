@@ -61,6 +61,10 @@ class StackedSheetsTest {
                     countries = SampleData.countries,
                     accounts = SampleData.accounts,
                     exampleNumber = formatter::exampleNumber,
+                    backup = SampleData.backupUi,
+                    onBackupEnabledChange = {},
+                    onChooseBackupFolder = {},
+                    onRestoreBackup = {},
                     onApply = {},
                     onDismiss = {},
                 )

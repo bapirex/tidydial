@@ -3,9 +3,12 @@ package net.evopoint.tidydial
 import android.app.Application
 import android.content.Context
 import net.evopoint.tidydial.data.AndroidContactsRepository
+import net.evopoint.tidydial.data.BackupManager
+import net.evopoint.tidydial.data.BackupStore
 import net.evopoint.tidydial.data.ContactsDataSource
 import net.evopoint.tidydial.data.CountryCatalog
 import net.evopoint.tidydial.data.PhoneNumberFormatter
+import net.evopoint.tidydial.data.SafBackupStore
 import net.evopoint.tidydial.data.SettingsRepository
 import net.evopoint.tidydial.data.UndoJournal
 
@@ -27,4 +30,8 @@ class AppContainer(context: Context) {
     }
     // noBackupFilesDir is never backed up or moved by device-to-device transfer on any API level.
     val undoJournal: UndoJournal by lazy { UndoJournal(appContext.noBackupFilesDir) }
+    val backupStore: BackupStore by lazy { SafBackupStore(appContext) }
+    val backupManager: BackupManager by lazy {
+        BackupManager(backupStore, settingsRepository, contactsRepository, BuildConfig.VERSION_NAME, formatter)
+    }
 }

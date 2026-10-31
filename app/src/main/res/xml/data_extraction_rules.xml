@@ -3,6 +3,10 @@
     Android 12+: the undo journal holds phone numbers. It lives in noBackupFilesDir, which is never
     backed up or transferred. These rules also keep any copy in files/ (and its temporary file) out
     of cloud backup and device-to-device transfer.
+
+    The backup settings (and the temporary file DataStore writes them through) are excluded too: the
+    backup folder's access grant does not carry over to a new install, and a new install writes a
+    new snapshot.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -12,6 +16,12 @@
         <exclude
             domain="file"
             path="undo_journal.json.tmp" />
+        <exclude
+            domain="file"
+            path="datastore/backup.preferences_pb" />
+        <exclude
+            domain="file"
+            path="datastore/backup.preferences_pb.tmp" />
     </cloud-backup>
     <device-transfer>
         <exclude
@@ -20,5 +30,11 @@
         <exclude
             domain="file"
             path="undo_journal.json.tmp" />
+        <exclude
+            domain="file"
+            path="datastore/backup.preferences_pb" />
+        <exclude
+            domain="file"
+            path="datastore/backup.preferences_pb.tmp" />
     </device-transfer>
 </data-extraction-rules>

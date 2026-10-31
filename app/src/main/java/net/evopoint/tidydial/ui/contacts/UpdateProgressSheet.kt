@@ -33,8 +33,8 @@ import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import net.evopoint.tidydial.ui.theme.phoneNumber
 
 /**
- * Non-dismissable sheet shown while an update or undo writes to the contacts provider. It cannot
- * be swiped, tapped or backed away; it closes when [progress] goes back to null.
+ * Non-dismissable sheet shown while an update, undo or restore writes to the contacts provider.
+ * It cannot be swiped, tapped or backed away; it closes when [progress] goes back to null.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +69,7 @@ fun UpdateProgressContent(progress: UpdateProgress, modifier: Modifier = Modifie
         when (progress.kind) {
             ProgressKind.APPLY -> R.string.list_progress_apply_title
             ProgressKind.UNDO -> R.string.list_progress_undo_title
+            ProgressKind.RESTORE -> R.string.list_progress_restore_title
         },
     )
     Column(
@@ -96,6 +97,15 @@ fun UpdateProgressContent(progress: UpdateProgress, modifier: Modifier = Modifie
             progress = { fraction },
             modifier = Modifier.fillMaxWidth(),
         )
+        if (progress.isBackingUp) {
+            // A slow provider (a cloud folder, a first snapshot) can hold "0 of N" for a while:
+            // say why, and announce it, while keeping the instruction below.
+            Text(
+                text = stringResource(R.string.list_progress_backing_up),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         Text(
             text = stringResource(R.string.list_progress_body),
             style = MaterialTheme.typography.bodyMedium,

@@ -3,6 +3,7 @@ package net.evopoint.tidydial.ui.contacts
 import android.content.res.Resources
 import androidx.compose.material3.SnackbarDuration
 import net.evopoint.tidydial.R
+import net.evopoint.tidydial.data.BackupReadError
 import net.evopoint.tidydial.ui.UiAction
 import net.evopoint.tidydial.ui.UiEvent
 
@@ -47,6 +48,68 @@ fun UiEvent.toSnackbarSpec(resources: Resources): SnackbarSpec {
             }
             SnackbarSpec(message = join(parts))
         }
+
+        is UiEvent.RestoredFromBackup -> {
+            val parts = buildList {
+                add(plural(R.plurals.list_snackbar_restored, restored))
+                if (skippedChanged > 0) add(plural(R.plurals.list_snackbar_kept, skippedChanged))
+                if (notFound > 0) add(plural(R.plurals.list_snackbar_not_found, notFound))
+                if (failed > 0) add(plural(R.plurals.list_snackbar_failed, failed))
+                if (backupFailed) add(resources.getString(R.string.list_snackbar_backup_not_saved))
+            }
+            if (restored > 0) {
+                // A restore is journaled like an update, so it can be undone.
+                SnackbarSpec(
+                    message = join(parts),
+                    actionLabel = resources.getString(R.string.list_snackbar_undo),
+                    action = UiAction.UndoLast,
+                    duration = SnackbarDuration.Long,
+                )
+            } else {
+                SnackbarSpec(message = join(parts), duration = SnackbarDuration.Long)
+            }
+        }
+
+        is UiEvent.NothingToRestore -> when {
+            alreadyRestored == 0 && changedSince == 0 && notFound == 0 ->
+                SnackbarSpec(message = resources.getString(R.string.backup_empty))
+
+            // Most likely another phone, or a re-added account: say so rather than "changed".
+            alreadyRestored == 0 && changedSince == 0 ->
+                SnackbarSpec(message = resources.getString(R.string.backup_none_found), duration = SnackbarDuration.Long)
+
+            else -> {
+                val parts = buildList {
+                    add(resources.getString(R.string.backup_nothing_to_restore))
+                    if (alreadyRestored > 0) add(plural(R.plurals.backup_already_restored, alreadyRestored))
+                    if (changedSince > 0) add(plural(R.plurals.list_snackbar_kept, changedSince))
+                    if (notFound > 0) add(plural(R.plurals.list_snackbar_not_found, notFound))
+                }
+                SnackbarSpec(message = join(parts), duration = SnackbarDuration.Long)
+            }
+        }
+
+        UiEvent.BackupReadFailed -> SnackbarSpec(
+            message = resources.getString(R.string.backup_read_failed),
+            actionLabel = resources.getString(R.string.list_snackbar_retry),
+            // Nothing was written and the selection is unchanged, so the same update starts again.
+            action = UiAction.ApplySelected,
+            duration = SnackbarDuration.Long,
+        )
+
+        is UiEvent.BackupUnreadable -> SnackbarSpec(
+            message = resources.getString(
+                when (error) {
+                    BackupReadError.UNREADABLE -> R.string.backup_unreadable
+                    BackupReadError.NOT_A_BACKUP -> R.string.backup_not_tidydial
+                    BackupReadError.NEWER_FORMAT -> R.string.backup_newer_format
+                },
+            ),
+        )
+
+        UiEvent.NoFilePicker -> SnackbarSpec(
+            message = resources.getString(R.string.backup_no_file_picker),
+        )
 
         UiEvent.LoadFailed -> SnackbarSpec(
             message = resources.getString(R.string.error_load_contacts),

@@ -6,21 +6,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.ExtensionDelimiter
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
+import net.evopoint.tidydial.ui.BackupError
+import net.evopoint.tidydial.ui.BackupUi
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
@@ -38,6 +44,10 @@ class FormatOptionsContentTest {
 
     private var draft by mutableStateOf(SampleData.config)
     private var pickCountryClicks = 0
+    private var backup by mutableStateOf(BackupUi())
+    private val backupToggles = mutableListOf<Boolean>()
+    private var folderClicks = 0
+    private var restoreClicks = 0
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
 
@@ -51,6 +61,10 @@ class FormatOptionsContentTest {
                     detectedCountryIso = "US",
                     accounts = SampleData.accounts,
                     exampleNumber = { region, style -> "$region ${style.name}" },
+                    backup = backup,
+                    onBackupEnabledChange = { backupToggles += it },
+                    onChooseBackupFolder = { folderClicks++ },
+                    onRestoreBackup = { restoreClicks++ },
                     onPickCountry = { pickCountryClicks++ },
                     onApply = {},
                     onCancel = {},
@@ -119,6 +133,62 @@ class FormatOptionsContentTest {
             FormatConfig.DEFAULT_EXCLUDED_ACCOUNT_TYPES + SampleData.GOOGLE,
             draft.excludedAccountTypes,
         )
+    }
+
+    @Test
+    fun backupsWithoutAFolderOfferOnlyTheSwitchAndRestore() {
+        setContent()
+        composeRule.onNodeWithText("No folder chosen").performScrollTo().assertExists()
+        composeRule.onNodeWithText("Backup folder").assertDoesNotExist()
+
+        composeRule.onNodeWithText("Back up before each update").performScrollTo()
+            .assert(hasRole(Role.Switch))
+            .assertIsOff()
+            .performClick()
+        composeRule.onNodeWithText("Restore from a backup…").performScrollTo().performClick()
+
+        assertEquals(listOf(true), backupToggles)
+        assertEquals(1, restoreClicks)
+    }
+
+    @Test
+    fun backupFolderCanBeChangedAndWarnsWhenUnavailable() {
+        backup = BackupUi(enabled = true, folderName = "TidyDial backups")
+        setContent()
+        composeRule.onNodeWithText("Back up before each update").performScrollTo().assertIsOn()
+        composeRule.onNodeWithText("TidyDial backups").performScrollTo().performClick()
+        assertEquals(1, folderClicks)
+        // Backups are not part of the draft: nothing to apply.
+        assertEquals(SampleData.config, draft)
+
+        backup = backup.copy(folderAvailable = false)
+        composeRule.onNodeWithText("Can’t write here anymore. Choose the folder again.").assertExists()
+        composeRule.onNodeWithText("Back up before each update").performClick()
+        assertEquals(listOf(false), backupToggles)
+    }
+
+    @Test
+    fun backupFolderRowSaysWhatItChangesToScreenReaders() {
+        backup = BackupUi(enabled = true, folderName = "TidyDial backups")
+        setContent()
+        val row = composeRule.onNode(hasText("TidyDial backups") and hasClickAction(), useUnmergedTree = false)
+        row.performScrollTo().assert(hasText("Backup folder"))
+        assertEquals(
+            "Change backup folder",
+            row.fetchSemanticsNode().config[SemanticsActions.OnClick].label,
+        )
+        row.performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, folderClicks)
+    }
+
+    @Test
+    fun backupSettingsSayTheyAreSavedRightAwayAndShowErrors() {
+        backup = BackupUi(enabled = true, folderName = "TidyDial backups", error = BackupError.SAVE_FAILED)
+        setContent()
+        composeRule.onNodeWithText("Changes here are saved right away", substring = true).performScrollTo()
+        composeRule.onNodeWithText("Couldn’t save your backup choice. Try again.").performScrollTo().assertExists()
+        backup = backup.copy(error = BackupError.NO_PICKER)
+        composeRule.onNodeWithText("No app found to pick a folder").assertExists()
     }
 
     @Test

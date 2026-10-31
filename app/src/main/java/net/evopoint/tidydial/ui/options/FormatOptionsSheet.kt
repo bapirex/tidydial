@@ -45,6 +45,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -58,6 +59,8 @@ import net.evopoint.tidydial.model.Country
 import net.evopoint.tidydial.model.ExtensionDelimiter
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
+import net.evopoint.tidydial.ui.BackupUi
+import net.evopoint.tidydial.ui.backup.BackupErrorText
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.PhoneNumberTextStyles
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
@@ -69,6 +72,11 @@ import net.evopoint.tidydial.ui.theme.TidyDialTheme
  * not reset it, and saved across configuration changes). "Apply" calls [onApply] with the draft
  * when it differs from [config]; "Cancel", back and swipe discard it. [onDismiss] runs once the
  * sheet has closed. The country row opens [CountryPickerSheet] on top.
+ *
+ * The Backups section is not part of the draft: its changes go through the system picker and
+ * take effect right away, which its description says, so Cancel never seems to undo them.
+ * [onRestoreBackup] is expected to close the sheet, which discards unsaved format edits like
+ * Cancel does.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +86,10 @@ fun FormatOptionsSheet(
     countries: List<Country>,
     accounts: List<AccountInfo>,
     exampleNumber: (String, NumberFormatStyle) -> String?,
+    backup: BackupUi,
+    onBackupEnabledChange: (Boolean) -> Unit,
+    onChooseBackupFolder: () -> Unit,
+    onRestoreBackup: () -> Unit,
     onApply: (FormatConfig) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -98,6 +110,10 @@ fun FormatOptionsSheet(
             detectedCountryIso = detectedCountryIso,
             accounts = accounts,
             exampleNumber = exampleNumber,
+            backup = backup,
+            onBackupEnabledChange = onBackupEnabledChange,
+            onChooseBackupFolder = onChooseBackupFolder,
+            onRestoreBackup = onRestoreBackup,
             onPickCountry = { pickingCountry = true },
             onApply = {
                 if (draft != config) onApply(draft)
@@ -133,6 +149,10 @@ internal fun FormatOptionsContent(
     detectedCountryIso: String,
     accounts: List<AccountInfo>,
     exampleNumber: (String, NumberFormatStyle) -> String?,
+    backup: BackupUi,
+    onBackupEnabledChange: (Boolean) -> Unit,
+    onChooseBackupFolder: () -> Unit,
+    onRestoreBackup: () -> Unit,
     onPickCountry: () -> Unit,
     onApply: () -> Unit,
     onCancel: () -> Unit,
@@ -179,6 +199,12 @@ internal fun FormatOptionsContent(
                         draft.copy(excludedAccountTypes = if (excluded) types + type else types - type),
                     )
                 },
+            )
+            BackupsSection(
+                backup = backup,
+                onEnabledChange = onBackupEnabledChange,
+                onChooseFolder = onChooseBackupFolder,
+                onRestore = onRestoreBackup,
             )
         }
         if (scrollState.canScrollForward) HorizontalDivider()
@@ -430,6 +456,86 @@ private fun AccountsSection(
     }
 }
 
+/**
+ * Backups before each update, the folder they go to, and restoring from a backup file. The
+ * folder row only shows once a folder was chosen. [BackupUi.error] shows under the rows, since a
+ * Snackbar would be hidden behind the sheet.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun BackupsSection(
+    backup: BackupUi,
+    onEnabledChange: (Boolean) -> Unit,
+    onChooseFolder: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    val folderName = backup.folderName
+    val count = if (folderName != null) 3 else 2
+    val changeFolderLabel = stringResource(R.string.options_backups_change_folder_action)
+    SheetSection(
+        title = stringResource(R.string.options_section_backups),
+        description = stringResource(R.string.options_backups_summary),
+    ) {
+        SegmentedListItem(
+            checked = backup.enabled,
+            onCheckedChange = onEnabledChange,
+            shapes = ListItemDefaults.segmentedShapes(index = 0, count = count),
+            colors = sheetListItemColors(),
+            modifier = Modifier.semantics { role = Role.Switch },
+            supportingContent = if (folderName == null) {
+                { Text(stringResource(R.string.options_backups_folder_none)) }
+            } else {
+                null
+            },
+            trailingContent = { Switch(checked = backup.enabled, onCheckedChange = null) },
+        ) {
+            Text(stringResource(R.string.options_backups_toggle))
+        }
+        if (folderName != null) {
+            SegmentedListItem(
+                onClick = onChooseFolder,
+                shapes = ListItemDefaults.segmentedShapes(index = 1, count = count),
+                colors = sheetListItemColors(),
+                // "Double-tap to change backup folder" rather than a bare "Double-tap to activate".
+                modifier = Modifier.semantics {
+                    onClick(label = changeFolderLabel) {
+                        onChooseFolder()
+                        true
+                    }
+                },
+                leadingContent = { Icon(painterResource(R.drawable.ic_folder), contentDescription = null) },
+                supportingContent = {
+                    if (backup.folderAvailable) {
+                        Text(stringResource(R.string.options_backups_change_folder))
+                    } else {
+                        Text(
+                            text = stringResource(R.string.options_backups_folder_unavailable),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                trailingContent = { Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null) },
+            ) {
+                Text(folderName)
+            }
+        }
+        SegmentedListItem(
+            onClick = onRestore,
+            shapes = ListItemDefaults.segmentedShapes(index = count - 1, count = count),
+            colors = sheetListItemColors(),
+            leadingContent = {
+                Icon(painterResource(R.drawable.ic_settings_backup_restore), contentDescription = null)
+            },
+            supportingContent = { Text(stringResource(R.string.options_backups_restore_summary)) },
+        ) {
+            Text(stringResource(R.string.options_backups_restore))
+        }
+        backup.error?.let {
+            BackupErrorText(it, Modifier.padding(horizontal = SheetGutter, vertical = 8.dp))
+        }
+    }
+}
+
 @Composable
 private fun OptionsFooter(onApply: () -> Unit, onCancel: () -> Unit) {
     Row(
@@ -493,7 +599,7 @@ private val PreviewExamples = mapOf(
 internal fun previewExampleNumber(region: String, style: NumberFormatStyle): String? =
     if (region == "US") PreviewExamples[style] else null
 
-@Preview(showBackground = true, heightDp = 1600)
+@Preview(showBackground = true, heightDp = 2000)
 @Composable
 private fun FormatOptionsContentPreview() {
     TidyDialTheme(dynamicColor = false) {
@@ -504,6 +610,10 @@ private fun FormatOptionsContentPreview() {
             detectedCountryIso = "US",
             accounts = SampleData.accounts,
             exampleNumber = ::previewExampleNumber,
+            backup = SampleData.backupUi,
+            onBackupEnabledChange = {},
+            onChooseBackupFolder = {},
+            onRestoreBackup = {},
             onPickCountry = {},
             onApply = {},
             onCancel = {},

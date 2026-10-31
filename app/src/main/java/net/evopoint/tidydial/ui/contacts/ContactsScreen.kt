@@ -1,6 +1,7 @@
 package net.evopoint.tidydial.ui.contacts
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.LocalActivity
@@ -66,11 +67,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
 import net.evopoint.tidydial.data.toIntent
 import net.evopoint.tidydial.model.NumberFormatStyle
+import net.evopoint.tidydial.ui.BackupDialog
 import net.evopoint.tidydial.ui.CallRequest
 import net.evopoint.tidydial.ui.UiAction
 import net.evopoint.tidydial.ui.UiEvent
 import net.evopoint.tidydial.ui.UiState
 import net.evopoint.tidydial.ui.about.AboutSheet
+import net.evopoint.tidydial.ui.backup.BackupFailedDialog
+import net.evopoint.tidydial.ui.backup.BackupPromptSheet
+import net.evopoint.tidydial.ui.backup.RestoreConfirmDialog
 import net.evopoint.tidydial.ui.options.FormatOptionsSheet
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
@@ -87,7 +92,7 @@ private val CompactHeaderHeight = 600.dp
 /**
  * Main screen: collapsing app bar with search and filters, the grouped contact list with
  * pull-to-refresh, the floating update toolbar, and the confirm / progress / Snackbar flow.
- * Hosts the format options, about and call sheets.
+ * Hosts the format options, about and call sheets, and the backup prompt, folder and file pickers.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -106,6 +111,7 @@ fun ContactsScreen(
 
     SearchQueryEffect(searchState, state.query, onAction)
     EventEffect(events, snackbarHostState, onAction)
+    val pickers = rememberBackupPickers(onAction)
 
     val topBarScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toolbarScroll = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
@@ -178,7 +184,6 @@ fun ContactsScreen(
             onDismiss = { showConfirm = false },
         )
     }
-    state.progress?.let { UpdateProgressSheet(it) }
     if (showOptions) {
         FormatOptionsSheet(
             config = state.config,
@@ -186,14 +191,96 @@ fun ContactsScreen(
             countries = state.countries,
             accounts = state.accounts,
             exampleNumber = exampleNumber,
+            backup = state.backup,
+            onBackupEnabledChange = { enabled ->
+                if (enabled && state.backup.folderName == null) {
+                    pickers.chooseFolder()
+                } else {
+                    onAction(UiAction.SetBackupEnabled(enabled))
+                }
+            },
+            onChooseBackupFolder = pickers.chooseFolder,
+            onRestoreBackup = {
+                showOptions = false
+                onAction(UiAction.DismissBackupError)
+                pickers.pickBackup()
+            },
             onApply = { onAction(UiAction.UpdateConfig(it)) },
-            onDismiss = { showOptions = false },
+            onDismiss = {
+                showOptions = false
+                onAction(UiAction.DismissBackupError)
+            },
         )
     }
     if (showAbout) {
         AboutSheet(onDismiss = { showAbout = false })
     }
+    when (val dialog = state.backupDialog) {
+        BackupDialog.FirstUpdate -> BackupPromptSheet(
+            error = state.backup.error,
+            onChooseFolder = pickers.chooseFolder,
+            onContinueWithout = { onAction(UiAction.ContinueWithoutBackup) },
+            onDismiss = { onAction(UiAction.DismissBackupDialog) },
+        )
+
+        is BackupDialog.WriteFailed -> BackupFailedDialog(
+            folderName = dialog.folderName,
+            error = state.backup.error,
+            onChooseFolder = pickers.chooseFolder,
+            onUpdateWithoutBackup = { onAction(UiAction.UpdateWithoutBackup) },
+            onDismiss = { onAction(UiAction.DismissBackupDialog) },
+        )
+
+        null -> Unit
+    }
+    state.restore?.let {
+        RestoreConfirmDialog(
+            confirmation = it,
+            onConfirm = { onAction(UiAction.ConfirmRestore) },
+            onDismiss = { onAction(UiAction.DismissRestore) },
+        )
+    }
     state.call?.let { CallRequestHandler(it, onAction) }
+    // Last, so it stays on top of any sheet that is still closing.
+    state.progress?.let { UpdateProgressSheet(it) }
+}
+
+/** Opens the system pickers for the backup folder and for a backup file to restore. */
+private class BackupPickers(val chooseFolder: () -> Unit, val pickBackup: () -> Unit)
+
+/**
+ * The folder and file pickers. Always composed at the same place, so a result still arrives
+ * after the activity was recreated while a picker was open.
+ */
+@Composable
+private fun rememberBackupPickers(onAction: (UiAction) -> Unit): BackupPickers {
+    val currentOnAction by rememberUpdatedState(onAction)
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        currentOnAction(UiAction.BackupFolderChosen(uri?.toString()))
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { currentOnAction(UiAction.RestoreFileChosen(it.toString())) }
+    }
+    return remember(folderPicker, filePicker) {
+        BackupPickers(
+            chooseFolder = {
+                try {
+                    folderPicker.launch(null)
+                } catch (e: ActivityNotFoundException) {
+                    // Shown in the sheet or dialog that asked for the folder.
+                    currentOnAction(UiAction.FolderPickerUnavailable)
+                }
+            },
+            pickBackup = {
+                try {
+                    // Providers often label JSON as text or binary, so any file can be picked.
+                    filePicker.launch(arrayOf("application/json", "*/*"))
+                } catch (e: ActivityNotFoundException) {
+                    currentOnAction(UiAction.FilePickerUnavailable)
+                }
+            },
+        )
+    }
 }
 
 /**

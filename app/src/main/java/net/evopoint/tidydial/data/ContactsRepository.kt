@@ -28,6 +28,7 @@ import net.evopoint.tidydial.model.AppChat
 import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.PhoneEntry
+import net.evopoint.tidydial.model.PhoneRow
 import java.text.Collator
 import java.util.Locale
 
@@ -69,10 +70,33 @@ data class UpdateResult(
     val failedIds: Set<Long> = emptySet(),
 )
 
+sealed interface PhoneRowsResult {
+    data class Success(val rows: List<PhoneRow>) : PhoneRowsResult
+
+    data object PermissionDenied : PhoneRowsResult
+
+    data class Error(val cause: Throwable) : PhoneRowsResult
+}
+
 typealias ProgressCallback = suspend (done: Int, total: Int) -> Unit
 
 interface ContactsDataSource {
     suspend fun load(config: FormatConfig): LoadResult
+
+    /**
+     * Every non-blank phone row of every account, skipped accounts too, with the identity a
+     * backup needs to find it again. Sorted by `dataId`.
+     */
+    suspend fun readPhoneRows(): PhoneRowsResult
+
+    /**
+     * Writes `before -> after` with the same optimistic check as [apply]: a row is only written
+     * while it still holds `before`. Used to restore numbers from a backup.
+     */
+    suspend fun write(
+        changes: List<JournalEntry>,
+        onProgress: ProgressCallback = { _, _ -> },
+    ): UpdateResult
 
     /** Writes `formattedNumber` for every modified entry, unless its number changed since loading. */
     suspend fun apply(
@@ -143,6 +167,25 @@ class AndroidContactsRepository(
         val changes = journal.map { JournalEntry(it.dataId, before = it.after, after = it.before) }
         return execute(changes, onProgress)
     }
+
+    override suspend fun readPhoneRows(): PhoneRowsResult {
+        if (!hasPermission(Manifest.permission.READ_CONTACTS)) return PhoneRowsResult.PermissionDenied
+        return try {
+            withContext(ioDispatcher) { PhoneRowsResult.Success(queryPhoneRows()) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            PhoneRowsResult.PermissionDenied
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not read phone rows", e)
+            PhoneRowsResult.Error(e)
+        }
+    }
+
+    override suspend fun write(
+        changes: List<JournalEntry>,
+        onProgress: ProgressCallback,
+    ): UpdateResult = execute(changes, onProgress)
 
     override suspend fun callOptions(entry: PhoneEntry, regionIso: String): List<CallOption> {
         // Tablets without telephony may have no phone app at all.
@@ -318,6 +361,65 @@ class AndroidContactsRepository(
                 ?: KNOWN_ACCOUNT_LABELS[type]
                 ?: labelFromAccountType(type)
         }
+
+    private class RawAccount(val type: String, val name: String?, val sourceId: String?)
+
+    /**
+     * The phone view for the rows, the raw contacts for their account and server id, like the
+     * account type fallback of [readSnapshot]: account name and source id are not on every
+     * provider's phone view.
+     */
+    private suspend fun queryPhoneRows(): List<PhoneRow> {
+        val scopeContext = currentCoroutineContext()
+        val accounts = HashMap<Long, RawAccount>()
+        resolver.query(
+            RawContacts.CONTENT_URI,
+            arrayOf(RawContacts._ID, RawContacts.ACCOUNT_TYPE, RawContacts.ACCOUNT_NAME, RawContacts.SOURCE_ID),
+            null,
+            null,
+            null,
+        )?.use { c ->
+            val idIdx = c.getColumnIndexOrThrow(RawContacts._ID)
+            val typeIdx = c.getColumnIndex(RawContacts.ACCOUNT_TYPE)
+            val nameIdx = c.getColumnIndex(RawContacts.ACCOUNT_NAME)
+            val sourceIdx = c.getColumnIndex(RawContacts.SOURCE_ID)
+            while (c.moveToNext()) {
+                accounts[c.getLong(idIdx)] = RawAccount(
+                    type = c.stringAt(typeIdx).orEmpty(),
+                    name = c.stringAt(nameIdx),
+                    sourceId = c.stringAt(sourceIdx)?.takeIf { it.isNotBlank() },
+                )
+            }
+        }
+        val cursor = resolver.query(Phone.CONTENT_URI, PHONE_ROW_PROJECTION, null, null, "${Phone._ID} ASC")
+            ?: throw IllegalStateException("Contacts provider unavailable")
+        val rows = ArrayList<PhoneRow>(cursor.count.coerceAtLeast(0))
+        cursor.use { c ->
+            val idIdx = c.getColumnIndexOrThrow(Phone._ID)
+            val rawIdx = c.getColumnIndex(Phone.RAW_CONTACT_ID)
+            val lookupIdx = c.getColumnIndex(Phone.LOOKUP_KEY)
+            val nameIdx = c.getColumnIndex(Phone.DISPLAY_NAME_PRIMARY)
+            val numberIdx = c.getColumnIndexOrThrow(Phone.NUMBER)
+            while (c.moveToNext()) {
+                if (c.position % CANCEL_CHECK_INTERVAL == 0) scopeContext.ensureActive()
+                val number = c.stringAt(numberIdx)
+                if (number.isNullOrBlank()) continue
+                val rawContactId = c.longAt(rawIdx)
+                val account = accounts[rawContactId]
+                rows += PhoneRow(
+                    dataId = c.getLong(idIdx),
+                    rawContactId = rawContactId,
+                    lookupKey = c.stringAt(lookupIdx)?.takeIf { it.isNotBlank() },
+                    accountType = account?.type.orEmpty(),
+                    accountName = account?.name,
+                    sourceId = account?.sourceId,
+                    displayName = c.stringAt(nameIdx),
+                    number = number,
+                )
+            }
+        }
+        return rows
+    }
 
     // endregion
 
@@ -587,6 +689,14 @@ class AndroidContactsRepository(
             Phone.LABEL,
         )
         val PROJECTION_WITH_ACCOUNT = PROJECTION + RawContacts.ACCOUNT_TYPE
+
+        val PHONE_ROW_PROJECTION = arrayOf(
+            Phone._ID,
+            Phone.RAW_CONTACT_ID,
+            Phone.LOOKUP_KEY,
+            Phone.DISPLAY_NAME_PRIMARY,
+            Phone.NUMBER,
+        )
 
         val SORT_ORDER =
             "${Phone.DISPLAY_NAME_PRIMARY} COLLATE LOCALIZED ASC, ${Phone.CONTACT_ID} ASC, ${Phone._ID} ASC"

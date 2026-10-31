@@ -10,7 +10,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -20,12 +22,22 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import net.evopoint.tidydial.data.BackupCodec
+import net.evopoint.tidydial.data.BackupFailure
+import net.evopoint.tidydial.data.BackupFile
+import net.evopoint.tidydial.data.BackupKind
+import net.evopoint.tidydial.data.BackupManager
+import net.evopoint.tidydial.data.BackupReadError
+import net.evopoint.tidydial.data.ChangeEntry
 import net.evopoint.tidydial.data.ContactsDataSource
 import net.evopoint.tidydial.data.CountryCatalog
+import net.evopoint.tidydial.data.FakeBackupStore
 import net.evopoint.tidydial.data.JournalEntry
 import net.evopoint.tidydial.data.LoadResult
 import net.evopoint.tidydial.data.PhoneNumberFormatter
+import net.evopoint.tidydial.data.PhoneRowsResult
 import net.evopoint.tidydial.data.ProgressCallback
+import net.evopoint.tidydial.data.RowIdentity
 import net.evopoint.tidydial.data.SettingsRepository
 import net.evopoint.tidydial.data.UndoJournal
 import net.evopoint.tidydial.data.UpdateResult
@@ -34,6 +46,7 @@ import net.evopoint.tidydial.model.CallOption
 import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
 import net.evopoint.tidydial.model.PhoneEntry
+import net.evopoint.tidydial.model.PhoneRow
 import net.evopoint.tidydial.ui.preview.SampleData
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -48,8 +61,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.time.Clock
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
-// Robolectric only for a working org.json inside UndoJournal.
+// Robolectric only for a working org.json inside UndoJournal and the backup files.
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class MainViewModelTest {
@@ -62,11 +79,15 @@ class MainViewModelTest {
     private lateinit var contacts: FakeContacts
     private lateinit var journalDir: File
     private var preferences: DataStore<Preferences> = InMemoryPreferences()
+    private var backupPreferences: DataStore<Preferences> = InMemoryPreferences()
+    private val log = mutableListOf<String>()
+    private val backupStore = FakeBackupStore(log)
+    private val clock = Clock.fixed(Instant.parse("2026-10-31T09:04:12Z"), ZoneOffset.UTC)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
-        contacts = FakeContacts()
+        contacts = FakeContacts(log)
         journalDir = tempFolder.newFolder()
     }
 
@@ -75,28 +96,40 @@ class MainViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun TestScope.createViewModel(): MainViewModel {
-        val settings = SettingsRepository(preferences, catalog) { listOf("us") }
+    private fun settings() = SettingsRepository(preferences, catalog, backupPreferences) { listOf("us") }
+
+    /**
+     * [backupChoiceMade]: the backup prompt was answered with "Continue without" (unless a folder
+     * was set up already), so updates start right away as before backups existed.
+     */
+    private fun TestScope.createViewModel(backupChoiceMade: Boolean = true): MainViewModel {
+        val settings = settings()
+        if (backupChoiceMade) {
+            runBlocking { if (!settings.backup.first().asked) settings.setBackupEnabled(false) }
+        }
+        val formatter = PhoneNumberFormatter()
         val viewModel = MainViewModel(
             contacts = contacts,
             settings = settings,
             undoJournal = UndoJournal(journalDir, dispatcher),
             countryCatalog = catalog,
-            formatter = PhoneNumberFormatter(),
+            formatter = formatter,
+            backupStore = backupStore,
+            backups = BackupManager(backupStore, settings, contacts, "1.2.0", formatter, { clock }, dispatcher),
             defaultDispatcher = dispatcher,
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
     }
 
-    private fun TestScope.grantedViewModel(): MainViewModel {
-        val viewModel = createViewModel()
+    private fun TestScope.grantedViewModel(backupChoiceMade: Boolean = true): MainViewModel {
+        val viewModel = createViewModel(backupChoiceMade)
         viewModel.onAction(UiAction.PermissionRechecked(granted = true))
         advanceUntilIdle()
         return viewModel
     }
 
-    private fun TestScope.collectEvents(viewModel: MainViewModel): List<UiEvent> {
+    private fun TestScope.collectEvents(viewModel: MainViewModel): MutableList<UiEvent> {
         val events = mutableListOf<UiEvent>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.events.toList(events) }
         return events
@@ -598,6 +631,559 @@ class MainViewModelTest {
 
     // endregion
 
+    // region Backups
+
+    /** Backups on, into [FOLDER], which TidyDial holds a grant for. */
+    private fun TestScope.backedUpViewModel(): MainViewModel {
+        runBlocking { settings().setBackupFolder(FOLDER, FOLDER_NAME) }
+        backupStore.access += FOLDER
+        return grantedViewModel()
+    }
+
+    private fun backupFile(name: String): BackupFile =
+        BackupCodec.decode(backupStore.files(FOLDER).single { it.name == name }.content)
+
+    /** The identity a backup holds for [dataId], from the fake provider's rows. */
+    private fun identityOf(dataId: Long): RowIdentity {
+        val rows = runBlocking { contacts.readPhoneRows() } as PhoneRowsResult.Success
+        val row = rows.rows.single { it.dataId == dataId }
+        return RowIdentity(row.dataId, row.rawContactId, row.lookupKey, row.accountType, row.accountName, row.sourceId, row.displayName)
+    }
+
+    @Test
+    fun firstUpdateShowsPromptAndWritesNothing() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        assertEquals(BackupDialog.FirstUpdate, viewModel.ui.backupDialog)
+        assertEquals(0, contacts.applyCalls)
+        assertNull(viewModel.ui.progress)
+        assertTrue(UndoJournal(journalDir, dispatcher).load().isEmpty())
+        assertTrue(events.isEmpty())
+        assertEquals(SampleData.defaultSelection, viewModel.ui.selection)
+    }
+
+    @Test
+    fun continueWithoutRemembersChoiceAndUpdates() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ToggleEntry(601L))
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.ContinueWithoutBackup)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(UiEvent.Updated(updated = 5, skippedChanged = 0, failed = 0), events.single())
+        assertTrue(backupStore.folders.isEmpty())
+        assertEquals(BackupUi(enabled = false), viewModel.ui.backup)
+
+        // The choice is remembered: the next update starts right away.
+        viewModel.onAction(UiAction.ToggleEntry(601L))
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(2, contacts.applyCalls)
+        assertTrue(settings().backup.first().asked)
+    }
+
+    @Test
+    fun dismissingThePromptCancelsTheUpdate() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.DismissBackupDialog)
+        advanceUntilIdle()
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(0, contacts.applyCalls)
+
+        // Nothing was remembered, so the next update asks again.
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertEquals(BackupDialog.FirstUpdate, viewModel.ui.backupDialog)
+    }
+
+    @Test
+    fun cancelledFolderPickerKeepsThePrompt() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.BackupFolderChosen(null))
+        advanceUntilIdle()
+        assertEquals(BackupDialog.FirstUpdate, viewModel.ui.backupDialog)
+        assertEquals(0, contacts.applyCalls)
+    }
+
+    @Test
+    fun chosenFolderBacksUpThenUpdates() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.BackupFolderChosen(FOLDER))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(BackupUi(enabled = true, folderName = FOLDER_NAME), viewModel.ui.backup)
+        val snapshotName = "TidyDial snapshot 2026-10-31 090412.json"
+        val changesName = "TidyDial backup 2026-10-31 090412.json"
+        // Both files are in the folder before any contact is written.
+        assertEquals(listOf("backup:$snapshotName", "backup:$changesName", "apply"), log)
+        val snapshot = backupFile(snapshotName) as BackupFile.Snapshot
+        assertEquals(SampleData.entries.map { it.dataId }, snapshot.entries.map { it.row.dataId })
+        assertEquals("2125550101", snapshot.entries.first().number)
+        val changes = backupFile(changesName) as BackupFile.Changes
+        assertEquals(SampleData.defaultSelection, changes.entries.map { it.row.dataId }.toSet())
+        val avery = changes.entries.single { it.row.dataId == 101L }
+        assertEquals(ChangeEntry(avery.row, "2125550101", "+1 212-555-0101"), avery)
+        assertEquals("source-10", avery.row.sourceId)
+        assertEquals("tester@example.com", avery.row.accountName)
+        assertEquals("US", changes.countryIso)
+        assertEquals(UiEvent.Updated(updated = 6, skippedChanged = 0, failed = 0), events.single())
+
+        // The next update only writes its changes; the snapshot is written once.
+        contacts.numbers[101L] = "2125550101"
+        viewModel.onAction(UiAction.Refresh)
+        advanceUntilIdle()
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertEquals(
+            listOf(snapshotName, changesName, "TidyDial backup 2026-10-31 090412 (2).json"),
+            backupStore.files(FOLDER).map { it.name },
+        )
+    }
+
+    @Test
+    fun backupFailureBlocksTheUpdate() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ToggleEntry(601L))
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        val journal = UndoJournal(journalDir, dispatcher).load()
+        assertEquals(5, journal.size)
+
+        backupStore.failWrite = BackupFailure.FOLDER_MISSING
+        viewModel.onAction(UiAction.ToggleEntry(601L))
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        assertEquals(BackupDialog.WriteFailed(FOLDER_NAME), viewModel.ui.backupDialog)
+        assertEquals(1, contacts.applyCalls)
+        assertEquals("6175550199", contacts.numbers[601L])
+        // The previous update can still be undone.
+        assertEquals(journal, UndoJournal(journalDir, dispatcher).load())
+        assertTrue(viewModel.ui.canUndo)
+        assertNull(viewModel.ui.progress)
+        assertEquals(1, events.size)
+        assertEquals(setOf(601L), viewModel.ui.selection)
+    }
+
+    @Test
+    fun choosingAFolderAfterAFailureResumesTheUpdate() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        backupStore.failWrite = BackupFailure.NO_ACCESS
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertTrue(viewModel.ui.backupDialog is BackupDialog.WriteFailed)
+
+        backupStore.failWrite = null
+        viewModel.onAction(UiAction.BackupFolderChosen(OTHER_FOLDER))
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(1, contacts.applyCalls)
+        assertEquals("Other folder", viewModel.ui.backup.folderName)
+        // The snapshot was not written before, so the new folder gets one.
+        assertEquals(2, backupStore.files(OTHER_FOLDER).size)
+        assertEquals(listOf(FOLDER), backupStore.released)
+    }
+
+    @Test
+    fun updateWithoutBackupRunsOnceAndKeepsBackupsOn() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        val events = collectEvents(viewModel)
+        backupStore.failWrite = BackupFailure.WRITE_FAILED
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.UpdateWithoutBackup)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(1, contacts.applyCalls)
+        assertEquals(UiEvent.Updated(updated = 6, skippedChanged = 0, failed = 0), events.single())
+        assertTrue(backupStore.files(FOLDER).isEmpty())
+        // Only this update skipped the backup: the next one tries again, and is held again.
+        assertTrue(viewModel.ui.backup.enabled)
+        contacts.numbers[101L] = "2125550101"
+        viewModel.onAction(UiAction.Refresh)
+        advanceUntilIdle()
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertEquals(BackupDialog.WriteFailed(FOLDER_NAME), viewModel.ui.backupDialog)
+        assertEquals(1, contacts.applyCalls)
+    }
+
+    @Test
+    fun turningBackupsOnNeedsAFolder() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        viewModel.onAction(UiAction.SetBackupEnabled(true))
+        advanceUntilIdle()
+        assertFalse(viewModel.ui.backup.enabled)
+
+        viewModel.onAction(UiAction.BackupFolderChosen(FOLDER))
+        advanceUntilIdle()
+        assertEquals(BackupUi(enabled = true, folderName = FOLDER_NAME), viewModel.ui.backup)
+        // No update was waiting, so none starts.
+        assertEquals(0, contacts.applyCalls)
+    }
+
+    @Test
+    fun revokedFolderAccessBlocksWithoutWriting() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        backupStore.access.clear()
+        viewModel.onAction(UiAction.PermissionRechecked(granted = true))
+        advanceUntilIdle()
+        assertFalse(viewModel.ui.backup.folderAvailable)
+
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        assertEquals(BackupDialog.WriteFailed(FOLDER_NAME), viewModel.ui.backupDialog)
+        assertTrue(backupStore.files(FOLDER).isEmpty())
+        assertEquals(0, contacts.applyCalls)
+    }
+
+    @Test
+    fun undoNeedsNoBackup() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        backupStore.access.clear()
+        backupStore.failWrite = BackupFailure.WRITE_FAILED
+        viewModel.onAction(UiAction.UndoLast)
+        advanceUntilIdle()
+
+        assertEquals(UiEvent.Undone(restored = 6, skippedChanged = 0, failed = 0), events.last())
+        assertEquals("2125550101", contacts.numbers[101L])
+        assertEquals(2, backupStore.files(FOLDER).size)
+        assertNull(viewModel.ui.backupDialog)
+    }
+
+    @Test
+    fun readFailureBlocksTheUpdateWithoutBlamingTheFolder() = runTest(dispatcher) {
+        val viewModel = backedUpViewModel()
+        val events = collectEvents(viewModel)
+        contacts.failRows = true
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals(listOf<UiEvent>(UiEvent.BackupReadFailed), events)
+        assertEquals(0, contacts.applyCalls)
+
+        // Its Retry runs the same update once the contacts can be read.
+        contacts.failRows = false
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        assertEquals(1, contacts.applyCalls)
+        assertEquals(2, backupStore.files(FOLDER).size)
+    }
+
+    private class Restorable(val viewModel: MainViewModel, val backup: String, val events: MutableList<UiEvent>)
+
+    /**
+     * An update with backups on, then 102 edited elsewhere and Frankie (601) deleted. [Restorable.events]
+     * starts empty after the update.
+     */
+    private fun TestScope.updatedThenChanged(): Restorable {
+        val viewModel = backedUpViewModel()
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+        events.clear()
+        contacts.numbers[102L] = "212 555 0102 edited elsewhere"
+        contacts.removedIds = setOf(601L)
+        return Restorable(viewModel, "$FOLDER/TidyDial backup 2026-10-31 090412.json", events)
+    }
+
+    @Test
+    fun restoreShowsConfirmationWithCounts() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        advanceUntilIdle()
+
+        assertEquals(
+            RestoreConfirmation(
+                kind = BackupKind.CHANGES,
+                createdAt = OffsetDateTime.parse("2026-10-31T09:04:12Z"),
+                count = 4,
+                changedSince = 1,
+                notFound = 1,
+            ),
+            viewModel.ui.restore,
+        )
+        assertEquals(0, contacts.progressKinds.count { it == ProgressKind.RESTORE })
+
+        viewModel.onAction(UiAction.DismissRestore)
+        advanceUntilIdle()
+        assertNull(viewModel.ui.restore)
+        viewModel.onAction(UiAction.ConfirmRestore)
+        advanceUntilIdle()
+        assertEquals("+1 212-555-0101", contacts.numbers[101L])
+    }
+
+    @Test
+    fun confirmedRestoreIsJournaledAndUndoable() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        val events = restorable.events
+        val filesBefore = backupStore.files(FOLDER).size
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.ConfirmRestore)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.restore)
+        assertEquals(
+            UiEvent.RestoredFromBackup(restored = 4, skippedChanged = 1, notFound = 1, failed = 0),
+            events.single(),
+        )
+        assertEquals("2125550101", contacts.numbers[101L])
+        assertEquals("212 555 0102 edited elsewhere", contacts.numbers[102L])
+        // With backups on, the numbers the restore replaced are backed up before it writes.
+        assertEquals(filesBefore + 1, backupStore.files(FOLDER).size)
+        assertEquals(listOf("backup:TidyDial backup 2026-10-31 090412 (2).json", "write"), log.takeLast(2))
+        val restoreBackup = backupFile("TidyDial backup 2026-10-31 090412 (2).json") as BackupFile.Changes
+        val averyRestore = restoreBackup.entries.single { it.row.dataId == 101L }
+        assertEquals("+1 212-555-0101", averyRestore.before)
+        assertEquals("2125550101", averyRestore.after)
+        val journal = UndoJournal(journalDir, dispatcher).load()
+        assertEquals(JournalEntry(101L, "+1 212-555-0101", "2125550101"), journal.single { it.dataId == 101L })
+        assertTrue(viewModel.ui.canUndo)
+
+        viewModel.onAction(UiAction.UndoLast)
+        advanceUntilIdle()
+        assertEquals(UiEvent.Undone(restored = 4, skippedChanged = 0, failed = 0), events.last())
+        assertEquals("+1 212-555-0101", contacts.numbers[101L])
+    }
+
+    @Test
+    fun restoreWorksWithoutABackupFolder() = runTest(dispatcher) {
+        // As right after a reinstall: no backup choice, no folder, a file picked by the user.
+        contacts.numbers[101L] = "+1 212-555-0101"
+        val picked = "content://downloads/backup.json"
+        backupStore.documents[picked] = BackupCodec.encode(
+            BackupFile.Changes(
+                createdAt = OffsetDateTime.parse("2026-10-30T18:30:00+01:00"),
+                appVersion = "1.2.0",
+                countryIso = "US",
+                entries = listOf(ChangeEntry(identityOf(101L), "2125550101", "+1 212-555-0101")),
+            ),
+        )
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+
+        viewModel.onAction(UiAction.RestoreFileChosen(picked))
+        advanceUntilIdle()
+        assertEquals(1, viewModel.ui.restore?.count)
+        viewModel.onAction(UiAction.ConfirmRestore)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.backupDialog)
+        assertEquals("2125550101", contacts.numbers[101L])
+        assertEquals(
+            UiEvent.RestoredFromBackup(restored = 1, skippedChanged = 0, notFound = 0, failed = 0),
+            events.single(),
+        )
+        assertFalse(settings().backup.first().asked)
+    }
+
+    @Test
+    fun unreadableBackupIsReported() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        val events = collectEvents(viewModel)
+        backupStore.documents["content://picked/newer.json"] =
+            """{"app":"TidyDial","format":2,"kind":"changes","entries":[]}"""
+        backupStore.documents["content://picked/other.json"] = """{"app":"SomethingElse","format":1}"""
+
+        viewModel.onAction(UiAction.RestoreFileChosen("content://picked/missing.json"))
+        advanceUntilIdle()
+        viewModel.onAction(UiAction.RestoreFileChosen("content://picked/newer.json"))
+        advanceUntilIdle()
+        viewModel.onAction(UiAction.RestoreFileChosen("content://picked/other.json"))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                UiEvent.BackupUnreadable(BackupReadError.UNREADABLE),
+                UiEvent.BackupUnreadable(BackupReadError.NEWER_FORMAT),
+                UiEvent.BackupUnreadable(BackupReadError.NOT_A_BACKUP),
+            ),
+            events,
+        )
+        assertNull(viewModel.ui.restore)
+    }
+
+    @Test
+    fun nothingToRestoreIsReported() = runTest(dispatcher) {
+        // The backup's update was undone already: every number holds its "before".
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        contacts.removedIds = emptySet()
+        viewModel.onAction(UiAction.UndoLast)
+        advanceUntilIdle()
+        val events = restorable.events
+        events.clear()
+
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        advanceUntilIdle()
+
+        // 102 was edited elsewhere, so the undo kept it; every other number holds its "before".
+        assertEquals(listOf(UiEvent.NothingToRestore(alreadyRestored = 5, changedSince = 1, notFound = 0)), events)
+        assertNull(viewModel.ui.restore)
+    }
+
+    @Test
+    fun restoreIsIgnoredWhileUpdating() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        backupStore.documents["content://picked/backup.json"] = BackupCodec.encode(
+            BackupFile.Changes(
+                createdAt = OffsetDateTime.parse("2026-10-30T18:30:00Z"),
+                appVersion = "1.2.0",
+                countryIso = "US",
+                entries = listOf(ChangeEntry(identityOf(101L), "2125550101", "+1 212-555-0101")),
+            ),
+        )
+        contacts.applyGate = CompletableDeferred()
+        viewModel.onAction(UiAction.ApplySelected)
+        runCurrent()
+
+        viewModel.onAction(UiAction.RestoreFileChosen("content://picked/backup.json"))
+        runCurrent()
+        contacts.applyGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.restore)
+    }
+
+    @Test
+    fun folderThatCannotBeAdoptedIsReported() = runTest(dispatcher) {
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+        backupStore.grantable = emptySet()
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.BackupFolderChosen(FOLDER))
+        advanceUntilIdle()
+
+        // Shown in the prompt itself: a Snackbar would be hidden behind it.
+        assertTrue(events.isEmpty())
+        assertEquals(BackupError.FOLDER_FAILED, viewModel.ui.backup.error)
+        assertNull(viewModel.ui.backup.folderName)
+        // The prompt stays for another folder or "Continue without".
+        assertEquals(BackupDialog.FirstUpdate, viewModel.ui.backupDialog)
+        assertEquals(0, contacts.applyCalls)
+
+        // The next choice clears it.
+        backupStore.grantable = null
+        viewModel.onAction(UiAction.BackupFolderChosen(FOLDER))
+        advanceUntilIdle()
+        assertNull(viewModel.ui.backup.error)
+        assertEquals(1, contacts.applyCalls)
+    }
+
+    @Test
+    fun unsavedBackupChoiceIsShownInThePrompt() = runTest(dispatcher) {
+        backupPreferences = FailingPreferences()
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.ApplySelected)
+        advanceUntilIdle()
+
+        viewModel.onAction(UiAction.ContinueWithoutBackup)
+        advanceUntilIdle()
+
+        assertTrue(events.isEmpty())
+        assertEquals(BackupError.SAVE_FAILED, viewModel.ui.backup.error)
+        assertEquals(BackupDialog.FirstUpdate, viewModel.ui.backupDialog)
+        assertEquals(0, contacts.applyCalls)
+
+        viewModel.onAction(UiAction.DismissBackupDialog)
+        advanceUntilIdle()
+        assertNull(viewModel.ui.backup.error)
+    }
+
+    @Test
+    fun unsavedToggleIsShownInTheOptionsSheet() = runTest(dispatcher) {
+        backupPreferences = FailingPreferences()
+        val viewModel = grantedViewModel(backupChoiceMade = false)
+        val events = collectEvents(viewModel)
+        viewModel.onAction(UiAction.SetBackupEnabled(false))
+        advanceUntilIdle()
+        assertEquals(BackupError.SAVE_FAILED, viewModel.ui.backup.error)
+        assertTrue(events.isEmpty())
+
+        // Closing the sheet clears it, so it does not show again when the sheet reopens.
+        viewModel.onAction(UiAction.DismissBackupError)
+        advanceUntilIdle()
+        assertNull(viewModel.ui.backup.error)
+    }
+
+    @Test
+    fun pickerUnavailabilityIsReportedWhereItWasAsked() = runTest(dispatcher) {
+        val viewModel = grantedViewModel()
+        val events = collectEvents(viewModel)
+        // The folder picker is opened from a sheet or dialog: shown there.
+        viewModel.onAction(UiAction.FolderPickerUnavailable)
+        advanceUntilIdle()
+        assertEquals(BackupError.NO_PICKER, viewModel.ui.backup.error)
+        assertTrue(events.isEmpty())
+
+        // The file picker closes the options sheet first: a Snackbar.
+        viewModel.onAction(UiAction.FilePickerUnavailable)
+        advanceUntilIdle()
+        assertEquals(listOf(UiEvent.NoFilePicker), events)
+    }
+
+    @Test
+    fun restoreGoesOnWhenItsBackupFails() = runTest(dispatcher) {
+        val restorable = updatedThenChanged()
+        val viewModel = restorable.viewModel
+        viewModel.onAction(UiAction.RestoreFileChosen(restorable.backup))
+        advanceUntilIdle()
+        val filesBefore = backupStore.files(FOLDER).size
+
+        backupStore.failWrite = BackupFailure.FOLDER_MISSING
+        viewModel.onAction(UiAction.ConfirmRestore)
+        advanceUntilIdle()
+
+        assertEquals(
+            UiEvent.RestoredFromBackup(restored = 4, skippedChanged = 1, notFound = 1, failed = 0, backupFailed = true),
+            restorable.events.single(),
+        )
+        assertEquals("2125550101", contacts.numbers[101L])
+        assertEquals(filesBefore, backupStore.files(FOLDER).size)
+        assertNull(viewModel.ui.backupDialog)
+        assertTrue(viewModel.ui.canUndo)
+    }
+
+    // endregion
+
     // region Load lifecycle
 
     @Test
@@ -1078,7 +1664,7 @@ class MainViewModelTest {
     }
 
     /** Simulates the contacts provider with the optimistic `before -> after` write semantics. */
-    private class FakeContacts : ContactsDataSource {
+    private class FakeContacts(private val log: MutableList<String> = mutableListOf()) : ContactsDataSource {
         val numbers: MutableMap<Long, String> =
             SampleData.entries.associateTo(LinkedHashMap()) { it.dataId to it.originalNumber }
         var extraEntries: List<PhoneEntry> = emptyList()
@@ -1087,6 +1673,7 @@ class MainViewModelTest {
         var applyGate: CompletableDeferred<Unit>? = null
         var failLoad = false
         var denyLoad = false
+        var failRows = false
 
         /** Writes of these rows throw; they are reported as failed (and left unchanged). */
         var failIds: Set<Long> = emptySet()
@@ -1129,12 +1716,39 @@ class MainViewModelTest {
         override suspend fun apply(entries: List<PhoneEntry>, onProgress: ProgressCallback): UpdateResult {
             applyCalls++
             progressKinds += ProgressKind.APPLY
+            log += "apply"
             applyGate?.await()
-            return write(entries.map { JournalEntry(it.dataId, it.originalNumber, it.formattedNumber) }, onProgress)
+            return commit(entries.map { JournalEntry(it.dataId, it.originalNumber, it.formattedNumber) }, onProgress)
         }
 
         override suspend fun restore(journal: List<JournalEntry>, onProgress: ProgressCallback): UpdateResult =
-            write(journal.map { JournalEntry(it.dataId, it.after, it.before) }, onProgress)
+            commit(journal.map { JournalEntry(it.dataId, it.after, it.before) }, onProgress)
+
+        override suspend fun write(changes: List<JournalEntry>, onProgress: ProgressCallback): UpdateResult {
+            log += "write"
+            progressKinds += ProgressKind.RESTORE
+            return commit(changes, onProgress)
+        }
+
+        /** The sample rows with made-up identities: Google contacts carry a source id. */
+        override suspend fun readPhoneRows(): PhoneRowsResult {
+            if (denyLoad) return PhoneRowsResult.PermissionDenied
+            if (failRows) return PhoneRowsResult.Error(IllegalStateException("test"))
+            val rows = SampleData.entries.filter { it.dataId !in removedIds }.map { entry ->
+                val synced = entry.accountType.isNotEmpty()
+                PhoneRow(
+                    dataId = entry.dataId,
+                    rawContactId = entry.rawContactId,
+                    lookupKey = "lookup-${entry.contactId}",
+                    accountType = entry.accountType,
+                    accountName = if (synced) "tester@example.com" else null,
+                    sourceId = if (synced) "source-${entry.rawContactId}" else null,
+                    displayName = entry.displayName,
+                    number = numbers.getValue(entry.dataId),
+                )
+            }
+            return PhoneRowsResult.Success(rows)
+        }
 
         override suspend fun callOptions(entry: PhoneEntry, regionIso: String): List<CallOption> {
             callLookups += entry to regionIso
@@ -1147,7 +1761,7 @@ class MainViewModelTest {
             SampleData.entries.filter { it.isValid }.forEach { numbers[it.dataId] = it.formattedNumber }
         }
 
-        private suspend fun write(changes: List<JournalEntry>, onProgress: ProgressCallback): UpdateResult {
+        private suspend fun commit(changes: List<JournalEntry>, onProgress: ProgressCallback): UpdateResult {
             val written = mutableListOf<JournalEntry>()
             val skipped = mutableSetOf<Long>()
             val failed = mutableSetOf<Long>()
@@ -1176,6 +1790,10 @@ class MainViewModelTest {
     }
 
     private companion object {
+        const val FOLDER = "content://tree/TidyDial backups"
+        const val FOLDER_NAME = "TidyDial backups"
+        const val OTHER_FOLDER = "content://tree/Other folder"
+
         fun sampleEntry(dataId: Long, contactId: Long, name: String, original: String, formatted: String) =
             PhoneEntry(
                 dataId = dataId,
