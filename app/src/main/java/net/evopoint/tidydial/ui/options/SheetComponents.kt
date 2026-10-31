@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -83,12 +84,16 @@ internal fun rememberExpandedSheetState(): SheetState = rememberBottomSheetState
 internal fun sheetListItemColors(): ListItemColors =
     ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright)
 
-/** Title and optional subtitle at the top of a sheet. */
+/**
+ * Title and optional subtitle at the top of a sheet. A subtitle that is a phone number takes
+ * [subtitleStyle] `PhoneNumberTextStyles.medium`, so it stays left-to-right in RTL locales.
+ */
 @Composable
 internal fun SheetHeader(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    subtitleStyle: TextStyle = MaterialTheme.typography.bodyMedium,
 ) {
     Column(
         modifier = modifier
@@ -104,7 +109,7 @@ internal fun SheetHeader(
         if (subtitle != null) {
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = subtitleStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

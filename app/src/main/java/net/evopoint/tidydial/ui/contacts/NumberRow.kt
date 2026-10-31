@@ -17,6 +17,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,6 +55,7 @@ private val RowShape = RoundedCornerShape(16.dp)
  * One number of a contact ([item] merges the same number stored in several accounts). Selectable
  * numbers (valid and changing) are a single merged checkbox row; invalid numbers are
  * informational. Numbers that are already formatted get a quiet one-line row with a check.
+ * Every row ends with a call button, a separate control next to (never inside) the toggle.
  *
  * [showAccount] shows the account badges on up-to-date rows; it is only needed when the contact's
  * numbers come from more than one account. Rows that change or are invalid always show them.
@@ -63,13 +65,14 @@ fun NumberRow(
     item: NumberItem,
     selected: Boolean,
     onToggle: () -> Unit,
+    onCall: () -> Unit,
     modifier: Modifier = Modifier,
     showAccount: Boolean = true,
 ) {
     val entry = item.entry
     val description = rowDescription(item)
     if (entry.isValid && !entry.isModified) {
-        TidyNumberRow(item, description, showAccount, modifier)
+        TidyNumberRow(item, description, showAccount, onCall, modifier)
         return
     }
     val selectable = entry.isSelectable
@@ -99,31 +102,39 @@ fun NumberRow(
     Row(
         modifier = modifier
             .clip(RowShape)
-            .background(tint)
-            .then(interaction)
-            .heightIn(min = 56.dp)
-            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            .background(tint),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            NumberLabels(entry.typeLabel, item.accountLabels)
-            if (!entry.isValid) {
-                Text(entry.originalNumber, style = PhoneNumberTextStyles.large)
-                StatusLine(
-                    iconRes = R.drawable.ic_error,
-                    text = stringResource(R.string.list_number_invalid),
-                    color = MaterialTheme.colorScheme.error,
-                )
+        // The toggle and its TalkBack sentence stop before the call button, so both stay reachable.
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .then(interaction)
+                .heightIn(min = 56.dp)
+                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                NumberLabels(entry.typeLabel, item.accountLabels)
+                if (!entry.isValid) {
+                    Text(entry.originalNumber, style = PhoneNumberTextStyles.large)
+                    StatusLine(
+                        iconRes = R.drawable.ic_error,
+                        text = stringResource(R.string.list_number_invalid),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    NumberChange(entry)
+                }
+            }
+            if (selectable) {
+                // The row itself is the toggle; the checkbox only shows the state.
+                Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(12.dp))
             } else {
-                NumberChange(entry)
+                Spacer(Modifier.width(8.dp))
             }
         }
-        if (selectable) {
-            // The row itself is the toggle; the checkbox only shows the state.
-            Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(12.dp))
-        } else {
-            Spacer(Modifier.width(8.dp))
-        }
+        CallButton(item, onCall)
     }
 }
 
@@ -138,48 +149,69 @@ private fun TidyNumberRow(
     item: NumberItem,
     description: String,
     showAccount: Boolean,
+    onCall: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = modifier
-            .clearAndSetSemantics { contentDescription = description }
-            .heightIn(min = 40.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FlowRow(
-            modifier = Modifier.weight(1f),
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clearAndSetSemantics { contentDescription = description }
+                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = item.entry.formattedNumber,
-                style = PhoneNumberTextStyles.large,
-            )
-            // One FlowRow item, so the whole group wraps as a unit; it only breaks internally
-            // when it is wider than a full line on its own.
             FlowRow(
+                modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = item.entry.typeLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
+                    text = item.entry.formattedNumber,
+                    style = PhoneNumberTextStyles.large,
                 )
-                if (showAccount) item.accountLabels.forEach { AccountBadge(it) }
+                // One FlowRow item, so the whole group wraps as a unit; it only breaks internally
+                // when it is wider than a full line on its own.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = item.entry.typeLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                    if (showAccount) item.accountLabels.forEach { AccountBadge(it) }
+                }
             }
+            Icon(
+                imageVector = CheckIcon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
         }
+        CallButton(item, onCall)
+    }
+}
+
+/**
+ * Starts a call to [item]'s number. Its own TalkBack stop, after the row; [IconButton] keeps the
+ * 48dp touch target.
+ */
+@Composable
+private fun CallButton(item: NumberItem, onCall: () -> Unit) {
+    val entry = item.entry
+    val number = if (entry.isValid) entry.formattedNumber else entry.originalNumber
+    IconButton(onClick = onCall) {
         Icon(
-            imageVector = CheckIcon,
-            contentDescription = null,
-            tint = scheme.primary,
-            modifier = Modifier.size(18.dp),
+            painter = painterResource(R.drawable.ic_call),
+            contentDescription = stringResource(R.string.list_number_call, number),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -316,6 +348,7 @@ private fun NumberRowPreview() {
                     item = item,
                     selected = item.isSelectedIn(SampleData.defaultSelection),
                     onToggle = {},
+                    onCall = {},
                 )
             }
         }

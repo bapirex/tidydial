@@ -68,5 +68,24 @@ fun UiEvent.toSnackbarSpec(resources: Resources): SnackbarSpec {
         UiEvent.PermissionRevoked -> SnackbarSpec(
             message = resources.getString(R.string.list_snackbar_permission_revoked),
         )
+
+        UiEvent.CallFailed -> SnackbarSpec(
+            message = resources.getString(R.string.list_snackbar_call_failed),
+        )
+
+        is UiEvent.CallPermissionDenied -> {
+            val message = resources.getString(R.string.list_snackbar_call_permission, app)
+            if (permanently) {
+                // The system will not ask again; only app settings can grant it.
+                SnackbarSpec(
+                    message = message,
+                    actionLabel = resources.getString(R.string.list_snackbar_settings),
+                    action = UiAction.OpenAppSettings,
+                    duration = SnackbarDuration.Long,
+                )
+            } else {
+                SnackbarSpec(message = message)
+            }
+        }
     }
 }

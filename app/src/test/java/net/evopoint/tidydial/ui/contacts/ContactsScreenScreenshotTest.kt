@@ -265,6 +265,31 @@ class ContactsScreenScreenshotTest {
     }
 
     @Test
+    fun callSheet() = captureCallSheet("call_sheet")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun callSheetDark() = captureCallSheet("call_sheet_dark", dark = true)
+
+    @Test
+    @Config(fontScale = 1.5f)
+    fun callSheetFontScale() = captureCallSheet("call_sheet_font_150")
+
+    /** The number in the header stays left-to-right, like in the list. */
+    @Test
+    @Config(qualifiers = "+ar")
+    fun callSheetRtl() = captureCallSheet("call_sheet_rtl")
+
+    /** The sheet that asks how to call Dana, over the list, once its entrance animation is done. */
+    private fun captureCallSheet(name: String, dark: Boolean = false) {
+        val state = SampleData.uiState(entries = SampleData.mostlyTidyEntries, selection = emptySet())
+        setScreen(state.copy(call = SampleData.callChoice), dark)
+        composeRule.mainClock.advanceTimeBy(2_000)
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$DIR/contacts_$name.png")
+    }
+
+    @Test
     fun updatedSnackbar() {
         setScreen(events = flowOf(UiEvent.Updated(updated = 6, skippedChanged = 1, failed = 0)))
         composeRule.mainClock.advanceTimeBy(1_000)

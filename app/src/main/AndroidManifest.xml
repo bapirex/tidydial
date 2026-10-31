@@ -4,6 +4,14 @@
 
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <!-- Only asked for when the user picks a call through an app that requires it (WhatsApp,
+         Signal, Telegram…). Regular calls open the dialer and never need it. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!-- CALL_PHONE implies telephony; keep the app available on tablets without it. -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
 
     <!-- TidyDial works fully offline: strip network access even if a dependency asks for it. -->
     <uses-permission
@@ -12,6 +20,22 @@
     <uses-permission
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
+
+    <!-- Package visibility for calling: whether a phone app can open a number, and which app
+         opens a contact's call or chat entry (WhatsApp, Signal…). Calls are only handed to those
+         apps; TidyDial never places a call itself. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data
+                android:mimeType="vnd.android.cursor.item/*"
+                android:scheme="content" />
+        </intent>
+    </queries>
 
     <application
         android:name=".App"

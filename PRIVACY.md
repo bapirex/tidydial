@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 19, 2026_
+_Last updated: October 30, 2026_
 
 TidyDial is an open-source app that formats the phone numbers in your Android contacts. It was
 designed so that your data never leaves your device.
@@ -15,12 +15,15 @@ designed so that your data never leaves your device.
 
 | Access | Why |
 | :--- | :--- |
-| **Contacts (read)** | To list the phone numbers in your contacts, with each contact's name and the account that stores the number, and to show how each number would look in the format you choose. |
+| **Contacts (read)** | To list the phone numbers in your contacts, with each contact's name and the account that stores the number, and to show how each number would look in the format you choose. When you tap a number's call button, TidyDial also reads the call and chat entries other apps (such as WhatsApp or Signal) added to that contact, to offer calling through them. |
 | **Contacts (write)** | To save the new format for the numbers you select and confirm, and to restore the old numbers when you tap Undo. Only the phone number field is changed. |
+| **Make phone calls** | Only requested when you choose to call through another app such as WhatsApp, because those apps only accept calls from apps that hold this permission. TidyDial never places a call itself: regular calls open your phone app with the number filled in. If you decline, TidyDial opens your chat with the contact in that app instead, when it has one. |
+| **Apps that can make calls (package visibility)** | To find whether your phone app and the apps that added a call to a contact can start that call or open your chat, and to show the name and icon of each app you can call with. TidyDial only sees apps that can open a phone number or a contact entry, not every installed app. This is checked on your device when you tap call, and the list of apps is never stored or sent anywhere. |
 | **SIM and network country** | To suggest your country, so that numbers without a country code are read correctly. Only the two-letter country code is read. No phone number, SIM serial or other identifier is read. |
 
-TidyDial asks for contacts access only after showing you what it will do. You can revoke access
-at any time in Android Settings.
+TidyDial asks for contacts access only after showing you what it will do, and for the call
+permission only when you choose to call through an app that needs it. You can revoke either at
+any time in Android Settings.
 
 ## What TidyDial stores on your device
 
@@ -43,6 +46,10 @@ parsed and formatted locally with Google's libphonenumber library, which needs n
 
 Opening the source code link from the About screen hands the link to your web browser. TidyDial
 itself does not make the request.
+
+Tapping a number's call button hands the number to your phone app, which opens with it filled in,
+or, if you pick one, to the app you chose to call with. TidyDial does not place the call itself.
+Other apps are only opened when you tap call.
 
 ## Children
 

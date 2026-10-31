@@ -59,6 +59,12 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 - **Extensions kept.** Dial sequences after a pause (`,`) or wait (`;`) are kept. You can make
   them all use *Wait* or *Pause*, or leave each number's own delimiter. `p` and `w` are converted
   to `,` and `;`.
+- **Call from the list.** Each number has a call button. It opens your phone app with the
+  number filled in, which needs no permission. When apps such as WhatsApp, Signal or Threema
+  added a voice or video call for that number to the contact, a sheet asks which way to call; a
+  single way starts right away. Most messaging apps only accept calls from apps that may make
+  phone calls, so TidyDial asks for that permission when you call through one. If you decline,
+  it opens your chat with the contact in that app instead, when it has one.
 - **Only valid numbers are rewritten.** Numbers libphonenumber cannot recognize are flagged as
   invalid and left as they are.
 - **Material You and Material 3 Expressive.** Built with Jetpack Compose and Material 3
@@ -74,7 +80,7 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 | **Where your data goes** | Nowhere. Contacts are read and edited in place through Android's contacts provider and never leave the device. |
 | **Stored by the app** | Your format settings and a journal of the last update (for undo). |
 | **Backups** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). |
-| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`) is the only permission you are asked for. |
+| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`). Make phone calls (`CALL_PHONE`) is only requested when you choose to call through another app such as WhatsApp; regular calls open your phone app. |
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 
@@ -118,6 +124,7 @@ app/src/main/java/net/evopoint/tidydial/
 ├── data/
 │   ├── ContactsRepository.kt Reads phone rows, applies and restores changes in batches
 │   ├── PhoneNumberFormatter.kt libphonenumber wrapper (formats, extensions, short numbers)
+│   ├── CallRows.kt, CallIntents.kt Call actions other apps add to a contact, and call intents
 │   ├── CountryCatalog.kt     Supported regions with localized names and calling codes
 │   ├── SettingsRepository.kt DataStore-backed settings and country detection
 │   └── UndoJournal.kt        Atomic JSON journal of the last update
@@ -125,7 +132,7 @@ app/src/main/java/net/evopoint/tidydial/
 └── ui/
     ├── MainActivity.kt, MainViewModel.kt, TidyDialApp.kt, UiState.kt
     ├── permission/           Contacts permission explainer
-    ├── contacts/             Contact list, filters, toolbar, confirm and progress sheets
+    ├── contacts/             Contact list, filters, toolbar, confirm, progress and call sheets
     ├── options/              Format options and country picker sheets
     ├── about/                About sheet with licenses
     ├── components/           Shared composables (logo)

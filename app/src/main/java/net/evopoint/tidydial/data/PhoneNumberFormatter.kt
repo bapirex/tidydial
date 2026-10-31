@@ -2,6 +2,7 @@ package net.evopoint.tidydial.data
 
 import com.google.i18n.phonenumbers.NumberParseException
 import com.google.i18n.phonenumbers.PhoneNumberUtil
+import com.google.i18n.phonenumbers.PhoneNumberUtil.MatchType
 import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat
 import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberType
 import com.google.i18n.phonenumbers.PhoneNumberUtil.ValidationResult
@@ -98,6 +99,34 @@ class PhoneNumberFormatter(
             ?: phoneUtil.getExampleNumber(region)
             ?: return null
         return phoneUtil.format(example, style.toLibraryFormat())
+    }
+
+    /**
+     * Whether [a] and [b] are the same number, reading numbers without a country code as local to
+     * [regionIso]. Formatting, extensions and dial sequences are ignored. Numbers libphonenumber
+     * cannot parse only match when their digits are equal.
+     */
+    fun isSameNumber(a: String, b: String, regionIso: String): Boolean {
+        val region = regionIso.uppercase(Locale.ROOT)
+        val mainA = splitDialSequence(a.trim()).main
+        val mainB = splitDialSequence(b.trim()).main
+        val parsedA = parseWithoutExtension(mainA, region)
+        val parsedB = parseWithoutExtension(mainB, region)
+        if (parsedA != null && parsedB != null) {
+            val match = phoneUtil.isNumberMatch(parsedA, parsedB)
+            return match == MatchType.EXACT_MATCH || match == MatchType.NSN_MATCH
+        }
+        val digitsA = mainA.filter { it.isDigit() }
+        return digitsA.isNotEmpty() && digitsA == mainB.filter { it.isDigit() }
+    }
+
+    private fun parseWithoutExtension(number: String, region: String): PhoneNumber? {
+        if (number.isEmpty()) return null
+        return try {
+            phoneUtil.parse(number, region).clearExtension()
+        } catch (e: NumberParseException) {
+            null
+        }
     }
 
     private fun isFormattable(number: PhoneNumber): Boolean =

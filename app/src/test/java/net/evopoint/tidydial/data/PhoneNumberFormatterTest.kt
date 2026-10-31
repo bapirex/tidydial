@@ -376,4 +376,35 @@ class PhoneNumberFormatterTest {
     fun exampleNumberForUnknownRegionIsNull() {
         assertNull(formatter.exampleNumber("ZZ", NumberFormatStyle.INTERNATIONAL))
     }
+
+    @Test
+    fun sameNumberIgnoresFormatting() {
+        assertTrue(formatter.isSameNumber("2125550123", "+1 212-555-0123", "US"))
+        assertTrue(formatter.isSameNumber("(212) 555-0123", "tel:+1-212-555-0123", "US"))
+        assertTrue(formatter.isSameNumber("+12125550123", "+1 212 555 0123", "DE"))
+        assertTrue(formatter.isSameNumber("021 123 4567", "+64 21 123 4567", "NZ"))
+    }
+
+    @Test
+    fun sameNumberIgnoresExtensionsAndDialSequences() {
+        assertTrue(formatter.isSameNumber("3105550142,12", "+1 310-555-0142", "US"))
+        assertTrue(formatter.isSameNumber("+1 310-555-0142 ext. 12", "+13105550142", "US"))
+        assertTrue(formatter.isSameNumber("+1 310-555-0142;99", "3105550142,12", "US"))
+    }
+
+    @Test
+    fun differentNumbersDoNotMatch() {
+        assertFalse(formatter.isSameNumber("+1 212-555-0123", "+1 212-555-0124", "US"))
+        // Same digits, read in different countries.
+        assertFalse(formatter.isSameNumber("+64 21 123 4567", "+61 21 123 4567", "US"))
+        // A local number is read in the configured country only.
+        assertFalse(formatter.isSameNumber("021 123 4567", "+64 21 123 4567", "US"))
+    }
+
+    @Test
+    fun unparsableNumbersMatchOnlyByDigits() {
+        assertTrue(formatter.isSameNumber("*#06#", "*#06#", "US"))
+        assertFalse(formatter.isSameNumber("*#06#", "*#07#", "US"))
+        assertFalse(formatter.isSameNumber("", "", "US"))
+    }
 }
