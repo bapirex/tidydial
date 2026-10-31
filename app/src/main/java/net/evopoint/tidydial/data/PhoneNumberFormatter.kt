@@ -6,6 +6,7 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat
 import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberType
 import com.google.i18n.phonenumbers.PhoneNumberUtil.ValidationResult
 import com.google.i18n.phonenumbers.Phonenumber.PhoneNumber
+import com.google.i18n.phonenumbers.Phonenumber.PhoneNumber.CountryCodeSource
 import com.google.i18n.phonenumbers.ShortNumberInfo
 import net.evopoint.tidydial.model.ExtensionDelimiter
 import net.evopoint.tidydial.model.FormatConfig
@@ -43,7 +44,8 @@ class PhoneNumberFormatter(
         if (split.main.isEmpty()) return unchanged(rawNumber, isValid = false)
 
         val parsed = try {
-            phoneUtil.parse(split.main, region)
+            // Keeps the raw input so that a Brazilian carrier code survives national formatting.
+            phoneUtil.parseAndKeepRawInput(split.main, region)
         } catch (e: NumberParseException) {
             null
         }
@@ -64,11 +66,26 @@ class PhoneNumberFormatter(
             base + separatorFor(config.extensionDelimiter, split.delimiter) + split.rest
         }
 
-        return if (result == trimmed) {
+        return if (result == trimmed || differsOnlyInGrouping(trimmed, result)) {
             unchanged(rawNumber, isValid = true)
         } else {
             FormattedResult(result, isValid = true, isModified = true)
         }
+    }
+
+    /**
+     * True when [original] already has the target's characters and is grouped with single
+     * spaces, only in different places. Grouping conventions vary (libphonenumber writes a New
+     * Zealand 0274 mobile as "+64 274 123 456" while people write "+64 27 412 3456"), so an
+     * already grouped number is left alone rather than shuffled around. The country code must
+     * still stand on its own, and formats without spaces (E.164) are always applied.
+     */
+    private fun differsOnlyInGrouping(original: String, formatted: String): Boolean {
+        if (' ' !in formatted || ' ' !in original) return false
+        if ("  " in original || original.any { it.isWhitespace() && it != ' ' }) return false
+        if (original.replace(" ", "") != formatted.replace(" ", "")) return false
+        return !formatted.startsWith('+') ||
+            original.substringBefore(' ') == formatted.substringBefore(' ')
     }
 
     /**
@@ -95,24 +112,46 @@ class PhoneNumberFormatter(
     }
 
     private fun formatBase(number: PhoneNumber, config: FormatConfig, region: String): String {
-        val format = when (config.formatStyle) {
-            NumberFormatStyle.NATIONAL ->
+        val inRegion = phoneUtil.getRegionCodeForNumber(number) == region
+        val format = when {
+            // Toll-free and shared-cost numbers such as Australia's 1800 only connect without
+            // the country code, whatever the style.
+            inRegion && !phoneUtil.canBeInternationallyDialled(number) -> PhoneNumberFormat.NATIONAL
+
+            config.formatStyle == NumberFormatStyle.NATIONAL -> when {
                 // A national format only makes sense inside the number's own region.
-                if (phoneUtil.getRegionCodeForNumber(number) == region) {
-                    PhoneNumberFormat.NATIONAL
-                } else {
-                    PhoneNumberFormat.INTERNATIONAL
-                }
+                !inRegion -> PhoneNumberFormat.INTERNATIONAL
+                // Where calls only reliably connect with the country code, it is never removed.
+                number.countryCodeSource != CountryCodeSource.FROM_DEFAULT_COUNTRY &&
+                    !nationalFormatConnects(number) -> PhoneNumberFormat.INTERNATIONAL
+                else -> PhoneNumberFormat.NATIONAL
+            }
 
             else -> config.formatStyle.toLibraryFormat()
         }
-        val formatted = phoneUtil.format(number, format)
+        val formatted = if (format == PhoneNumberFormat.NATIONAL) {
+            phoneUtil.formatNationalNumberWithPreferredCarrierCode(number, "")
+        } else {
+            phoneUtil.format(number, format)
+        }
 
         // E.164 has no extension syntax; keep the extension as a dial sequence instead of dropping it.
         if (format == PhoneNumberFormat.E164 && number.hasExtension() && number.extension.isNotEmpty()) {
             return formatted + separatorFor(config.extensionDelimiter, WAIT) + number.extension
         }
         return formatted
+    }
+
+    /**
+     * False where libphonenumber knows that a mobile has to dial the country code: Mexico, Chile
+     * and Uzbekistan, and Brazil, where the national format needs a carrier code instead.
+     */
+    private fun nationalFormatConnects(number: PhoneNumber): Boolean {
+        // North American numbers dial either way; libphonenumber merely prefers +1.
+        if (number.countryCode == NANP_COUNTRY_CODE) return true
+        val home = phoneUtil.getRegionCodeForCountryCode(number.countryCode)
+        val dialled = phoneUtil.formatNumberForMobileDialing(number, home, false)
+        return dialled.isNotEmpty() && !dialled.startsWith('+')
     }
 
     private fun separatorFor(delimiter: ExtensionDelimiter, original: String): String =
@@ -149,6 +188,7 @@ class PhoneNumberFormatter(
     private companion object {
         const val PAUSE = ","
         const val WAIT = ";"
+        const val NANP_COUNTRY_CODE = 1
 
         /**
          * "," and ";" always start a dial sequence (except RFC 3966 parameters such as ";ext=").
