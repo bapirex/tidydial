@@ -36,15 +36,27 @@
     <!-- Spoken by screen readers for the example card. %1$s is the original number, %2$s the formatted one. -->
     <string name="permission_example_description">Example: %1$s becomes %2$s</string>
 
+    <!-- What each permission is for, one item per permission. -->
+    <string name="permission_contacts_title">Contacts</string>
+    <string name="permission_contacts_body">To read and tidy the phone numbers in your contacts. TidyDial never sends them anywhere.</string>
+    <string name="permission_call_title">Phone calls</string>
+    <!-- CALL_PHONE. Messaging apps only start a call for apps that hold it; TidyDial itself never uses it to dial. -->
+    <string name="permission_call_body">Lets calls through WhatsApp, Signal, Telegram or Google Meet start right from TidyDial, since those apps only accept calls from apps allowed to make them. Regular calls always open your phone app, and TidyDial never places a call by itself.</string>
+    <!-- Label next to a permission's name. -->
+    <string name="permission_required">Required</string>
+    <string name="permission_optional">Optional</string>
+
     <!-- Privacy promises. -->
     <string name="permission_promise_offline">Works completely offline — no internet permission</string>
     <string name="permission_promise_undo">Review every change, undo any time</string>
 
     <!-- Actions. -->
-    <string name="permission_allow">Allow contacts access</string>
+    <!-- Asks for contacts access and, unless granted already, the optional call permission. -->
+    <string name="permission_continue">Continue</string>
     <string name="permission_open_settings">Open settings</string>
-    <!-- Shown under the button while the system dialog can still be shown. -->
-    <string name="permission_denied_hint">Next, Android will ask for access. Choose Allow.</string>
+    <!-- Shown above the button while the system dialogs can still be shown: one for contacts and,
+         unless granted or refused already, one for phone calls. -->
+    <string name="permission_denied_hint">Next, Android asks for access. Allow contacts to continue.</string>
     <!-- Shown when the system dialog will not appear again. -->
     <string name="permission_permanently_denied">Contacts access was denied. Enable it in Settings &gt; Permissions.</string>
     <string name="permission_footnote">TidyDial only changes phone numbers.</string>

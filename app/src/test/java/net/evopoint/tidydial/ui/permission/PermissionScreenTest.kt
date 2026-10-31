@@ -44,18 +44,40 @@ class PermissionScreenTest {
     fun denied_buttonRequestsPermission() {
         show(PermissionStatus.Denied)
         composeRule.onNodeWithText(string(R.string.permission_denied_hint)).assertIsDisplayed()
-        composeRule.onNodeWithText(string(R.string.permission_allow)).performScrollTo().performClick()
+        // Pinned below the scrolling content, so it is on screen without scrolling.
+        composeRule.onNodeWithText(string(R.string.permission_continue)).assertIsDisplayed().performClick()
         assertEquals(1, requests)
         assertEquals(0, settingsOpened)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h400dp-xxhdpi")
+    fun shortWindow_actionsScrollIntoReach() {
+        RuntimeEnvironment.setFontScale(1.5f)
+        show(PermissionStatus.PermanentlyDenied)
+        // Too short to pin the actions: they scroll with the content and can be reached.
+        composeRule.onNodeWithText(string(R.string.permission_open_settings)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.permission_footnote)).performScrollTo().assertIsDisplayed()
+        assertEquals(1, settingsOpened)
+    }
+
+    @Test
+    fun eachPermissionIsExplainedAndLabelled() {
+        show(PermissionStatus.Denied)
+        composeRule.onNodeWithText(string(R.string.permission_contacts_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.permission_required)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.permission_call_title)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.permission_optional)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.permission_call_body)).performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun permanentlyDenied_buttonOpensSettings() {
         show(PermissionStatus.PermanentlyDenied)
         composeRule.onNodeWithText(string(R.string.permission_permanently_denied)).assertIsDisplayed()
-        composeRule.onNodeWithText(string(R.string.permission_allow)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.permission_continue)).assertDoesNotExist()
         composeRule.onNodeWithText(string(R.string.permission_open_settings))
-            .performScrollTo()
+            .assertIsDisplayed()
             .performClick()
         assertEquals(0, requests)
         assertEquals(1, settingsOpened)

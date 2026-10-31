@@ -306,10 +306,12 @@ private fun CallRequestHandler(request: CallRequest, onAction: (UiAction) -> Uni
 }
 
 /**
- * Asks for CALL_PHONE, unless it is granted already, and reports the answer. Asks once per
- * request: not again when the activity is recreated while the system dialog is up. The pending
- * call lives only in the ViewModel, so if the process dies meanwhile the answer is dropped and
- * the user taps call again (like the rest of the app, nothing survives process death).
+ * Asks for CALL_PHONE, unless it is granted already, and reports the answer. The setup screen
+ * asks for it too, so this only shows when it was declined there, or for users who granted
+ * contacts access before setup asked for it. Asks once per request: not again when the activity
+ * is recreated while the system dialog is up. The pending call lives only in the ViewModel, so if
+ * the process dies meanwhile the answer is dropped and the user taps call again (like the rest of
+ * the app, nothing survives process death).
  */
 @Composable
 private fun CallPermissionRequest(request: CallRequest.RequestPermission, onAction: (UiAction) -> Unit) {

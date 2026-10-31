@@ -72,7 +72,8 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
   number filled in, which needs no permission. When apps such as WhatsApp, Signal or Threema
   added a voice or video call for that number to the contact, a sheet asks which way to call; a
   single way starts right away. Most messaging apps only accept calls from apps that may make
-  phone calls, so TidyDial asks for that permission when you call through one. If you decline,
+  phone calls, so the setup screen asks for that permission too, marked optional, and TidyDial
+  asks again only when you call through such an app without having granted it. If you decline,
   it opens your chat with the contact in that app instead, when it has one.
 - **Only valid numbers are rewritten.** Numbers libphonenumber cannot recognize are flagged as
   invalid and left as they are.
@@ -90,7 +91,7 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 | **Stored by the app** | Your format settings, your backup choice and a journal of the last update (for undo). |
 | **Android backup** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). The backup choice is excluded from cloud backup and device transfer. |
 | **Backup files** | Optional. Stored only in the folder you pick, never in TidyDial's Android backup, and TidyDial never sends them anywhere. If you pick a cloud storage app's folder, that app syncs the files. They hold names and numbers, and stay after uninstalling. |
-| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`). Make phone calls (`CALL_PHONE`) is only requested when you choose to call through another app such as WhatsApp; regular calls open your phone app. |
+| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`), required. Make phone calls (`CALL_PHONE`), optional: asked for during setup, and again only if you choose to call through another app such as WhatsApp without having granted it; regular calls open your phone app. |
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 
@@ -143,7 +144,7 @@ app/src/main/java/net/evopoint/tidydial/
 ├── model/                    Plain data classes (PhoneEntry, ContactGroup, FormatConfig, ...)
 └── ui/
     ├── MainActivity.kt, MainViewModel.kt, TidyDialApp.kt, UiState.kt
-    ├── permission/           Contacts permission explainer
+    ├── permission/           Permission explainer: contacts, and the optional call permission
     ├── backup/               Backup prompt, backup failure and restore confirmation
     ├── contacts/             Contact list, filters, toolbar, confirm, progress and call sheets
     ├── options/              Format options and country picker sheets

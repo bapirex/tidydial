@@ -2,6 +2,7 @@ package net.evopoint.tidydial.ui.permission
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -179,13 +181,115 @@ internal fun ExampleCard(modifier: Modifier = Modifier) {
     }
 }
 
+/** One permission TidyDial asks for, and what it is used for. */
+private class PermissionUse(
+    @DrawableRes val icon: Int,
+    @StringRes val title: Int,
+    @StringRes val body: Int,
+    val required: Boolean,
+)
+
+private val permissionUses = listOf(
+    PermissionUse(
+        icon = R.drawable.ic_contacts,
+        title = R.string.permission_contacts_title,
+        body = R.string.permission_contacts_body,
+        required = true,
+    ),
+    PermissionUse(
+        icon = R.drawable.ic_call,
+        title = R.string.permission_call_title,
+        body = R.string.permission_call_body,
+        required = false,
+    ),
+)
+
+/** Each permission in its own labelled row (required or optional), as one connected group. */
+@Composable
+internal fun PermissionUses(modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        permissionUses.forEachIndexed { index, use ->
+            PermissionUseRow(use = use, shape = segmentShape(index = index, count = permissionUses.size))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PermissionUseRow(use: PermissionUse, shape: Shape, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
+        shape = shape,
+        color = colors.surfaceContainer,
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(colors.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(use.icon),
+                    contentDescription = null,
+                    tint = colors.onPrimaryContainer,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column {
+                // The label wraps below the name when a large font leaves no room beside it.
+                FlowRow(
+                    modifier = Modifier.heightIn(min = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(use.title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.onSurface,
+                    )
+                    PermissionLabel(required = use.required)
+                }
+                Text(
+                    text = stringResource(use.body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** "Required" on a filled pill, "Optional" on an outlined one. */
+@Composable
+private fun PermissionLabel(required: Boolean, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = if (required) colors.secondaryContainer else Color.Transparent,
+        contentColor = if (required) colors.onSecondaryContainer else colors.onSurfaceVariant,
+        border = if (required) null else BorderStroke(1.dp, colors.outlineVariant),
+    ) {
+        Text(
+            text = stringResource(if (required) R.string.permission_required else R.string.permission_optional),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+        )
+    }
+}
+
 private val promises = listOf(
     R.drawable.ic_cloud_off to R.string.permission_promise_offline,
-    R.drawable.ic_lock to R.string.privacy_on_device,
     R.drawable.ic_undo to R.string.permission_promise_undo,
 )
 
-/** The three privacy promises as one connected group of rows. */
+/** The privacy promises as one connected group of rows. */
 @Composable
 internal fun PrivacyPromises(modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -298,7 +402,7 @@ internal fun PermissionActions(
             }
             Text(
                 text = stringResource(
-                    if (permanentlyDenied) R.string.permission_open_settings else R.string.permission_allow,
+                    if (permanentlyDenied) R.string.permission_open_settings else R.string.permission_continue,
                 ),
                 style = ButtonDefaults.textStyleFor(height),
                 textAlign = TextAlign.Center,
@@ -356,6 +460,14 @@ private fun PermissionHeroPreview() {
 private fun ExampleCardPreview() {
     TidyDialTheme(dynamicColor = false) {
         ExampleCard(modifier = Modifier.padding(24.dp))
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PermissionUsesPreview() {
+    TidyDialTheme(dynamicColor = false) {
+        PermissionUses(modifier = Modifier.padding(24.dp))
     }
 }
 

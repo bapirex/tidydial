@@ -1511,6 +1511,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun callPermissionDeclinedDuringSetupIsAskedForAgainOnUse() = runTest(dispatcher) {
+        // The setup screen reports only the contacts answer, whatever happened to the call permission.
+        contacts.canDial = false
+        contacts.callApps = listOf(guardedVoice)
+        val viewModel = createViewModel()
+        viewModel.onAction(UiAction.PermissionRechecked(granted = false))
+        viewModel.onAction(UiAction.PermissionResult(granted = true, canAskAgain = true))
+        advanceUntilIdle()
+        assertEquals(PermissionStatus.Granted, viewModel.ui.permission)
+
+        viewModel.onAction(UiAction.Call(listOf(101L)))
+        advanceUntilIdle()
+        assertEquals(CallRequest.RequestPermission(guardedVoice), viewModel.ui.call)
+
+        viewModel.onAction(UiAction.CallPermissionResult(granted = false, canAskAgain = true))
+        advanceUntilIdle()
+        assertEquals(CallRequest.OpenChat(guardedVoice.chat!!), viewModel.ui.call)
+    }
+
+    @Test
     fun pickingThePhoneAppDials() = runTest(dispatcher) {
         val viewModel = choosing(guardedVoice)
 
