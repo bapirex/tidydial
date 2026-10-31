@@ -86,6 +86,7 @@ class MainViewModel(
         val backup: BackupUi = BackupUi(),
         val backupDialog: BackupDialog? = null,
         val restore: RestoreConfirmation? = null,
+        val preparingRestore: Boolean = false,
     )
 
     /** How an update, undo or restore ended; null in [runUpdate] when the journal was not saved. */
@@ -135,6 +136,13 @@ class MainViewModel(
 
     /** What [UiState.restore] would write once confirmed. */
     private var pendingRestore: RestorePlan? = null
+
+    /**
+     * The app whose chat [CallRequest.OpenChat] opens because its call permission is refused for
+     * good; once the chat opened, [chatNoticeOnReturn] says why when the user is back.
+     */
+    private var chatNotice: String? = null
+    private var chatNoticeOnReturn: String? = null
 
     @OptIn(FlowPreview::class)
     private val display: Flow<Display> = combine(
@@ -188,6 +196,7 @@ class MainViewModel(
             backup = status.backup,
             backupDialog = status.backupDialog,
             restore = status.restore,
+            preparingRestore = status.preparingRestore,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), UiState())
 
@@ -243,12 +252,16 @@ class MainViewModel(
             UiAction.UndoLast -> undoLast()
             is UiAction.UpdateConfig -> updateConfig(action.config)
             is UiAction.PermissionResult -> onPermissionResult(action.granted, action.canAskAgain)
-            is UiAction.PermissionRechecked -> onPermissionRechecked(action.granted)
+            is UiAction.PermissionRechecked -> {
+                onPermissionRechecked(action.granted)
+                showChatNotice()
+            }
             is UiAction.Call -> call(action.dataIds)
             is UiAction.PickCall -> pickCall(action.option)
             is UiAction.CallPermissionResult -> onCallPermissionResult(action.granted, action.canAskAgain)
-            UiAction.DismissCall -> status.update { it.copy(call = null) }
+            UiAction.DismissCall -> onCallDismissed()
             UiAction.CallFailed -> {
+                chatNotice = null
                 status.update { it.copy(call = null) }
                 eventChannel.trySend(UiEvent.CallFailed)
             }
@@ -270,8 +283,10 @@ class MainViewModel(
             is UiAction.RestoreFileChosen -> prepareRestore(action.uri)
             UiAction.ConfirmRestore -> confirmRestore()
             UiAction.DismissRestore -> {
+                // Also stops reading a backup that takes long (a large file, a slow provider).
+                restoreJob?.cancel()
                 pendingRestore = null
-                status.update { it.copy(restore = null) }
+                status.update { it.copy(restore = null, preparingRestore = false) }
             }
 
             UiAction.FolderPickerUnavailable -> setBackupError(BackupError.NO_PICKER)
@@ -379,7 +394,7 @@ class MainViewModel(
 
     /** [skipBackup]: the user chose to run this update without the backup that failed. */
     private fun applySelected(skipBackup: Boolean = false) {
-        if (updateJob?.isActive == true) return
+        if (isBusy()) return
         val data = loaded.value ?: return
         val selected = selection.value
         val entries = data.entries.filter { it.dataId in selected && it.isSelectable }
@@ -415,7 +430,7 @@ class MainViewModel(
     }
 
     private fun undoLast() {
-        if (updateJob?.isActive == true) return
+        if (isBusy()) return
         updateJob = viewModelScope.launch {
             val journal = undoJournal.load()
             if (journal.isEmpty()) {
@@ -433,6 +448,12 @@ class MainViewModel(
             }
         }
     }
+
+    /**
+     * An update, undo or restore is running, or a restore is being prepared: a restore planned
+     * from numbers an update then changes would only skip them, but would confirm a stale count.
+     */
+    private fun isBusy(): Boolean = updateJob?.isActive == true || restoreJob?.isActive == true
 
     /**
      * Saves [planned] as the journal, runs [write] and shrinks the journal to what was written.
@@ -485,12 +506,17 @@ class MainViewModel(
             RunResult.PermissionLost -> onPermissionLost()
             is RunResult.BackupFailed -> {
                 Log.w(TAG, "Backup failed (${outcome.failure}), the update did not start")
-                if (outcome.failure == BackupFailure.READ_CONTACTS_FAILED) {
+                when (outcome.failure) {
                     // Not the folder's fault: choosing it again would not help.
-                    eventChannel.trySend(UiEvent.BackupReadFailed)
-                } else {
-                    refreshBackupAccess()
-                    status.update { it.copy(backupDialog = BackupDialog.WriteFailed(it.backup.folderName)) }
+                    BackupFailure.READ_CONTACTS_FAILED -> eventChannel.trySend(UiEvent.BackupReadFailed)
+                    BackupFailure.TOO_LARGE -> status.update {
+                        it.copy(backupDialog = BackupDialog.WriteFailed(it.backup.folderName, tooLarge = true))
+                    }
+
+                    else -> {
+                        refreshBackupAccess()
+                        status.update { it.copy(backupDialog = BackupDialog.WriteFailed(it.backup.folderName)) }
+                    }
                 }
             }
 
@@ -608,35 +634,52 @@ class MainViewModel(
         }
     }
 
-    /** Reads and plans a restore from the backup the user picked, then asks to confirm it. */
+    /**
+     * Reads and plans a restore from the backup the user picked, then asks to confirm it. Shown
+     * as [UiState.preparingRestore] meanwhile.
+     */
     private fun prepareRestore(uri: String) {
-        if (updateJob?.isActive == true || restoreJob?.isActive == true) return
-        restoreJob = viewModelScope.launch {
-            val country = settings.config.first().countryIso
-            when (val outcome = backups.prepareRestore(uri, country)) {
-                is BackupManager.RestoreOutcome.Invalid -> eventChannel.trySend(UiEvent.BackupUnreadable(outcome.error))
-                BackupManager.RestoreOutcome.ContactsFailed -> eventChannel.trySend(UiEvent.LoadFailed)
-                BackupManager.RestoreOutcome.PermissionDenied -> onPermissionLost()
-                is BackupManager.RestoreOutcome.Ready -> {
-                    val plan = outcome.plan
-                    if (plan.changes.isEmpty()) {
-                        eventChannel.trySend(
-                            UiEvent.NothingToRestore(plan.alreadyRestored, plan.changedSince, plan.notFound),
-                        )
-                        return@launch
-                    }
-                    pendingRestore = plan
-                    status.update {
-                        it.copy(
-                            restore = RestoreConfirmation(
-                                kind = outcome.backup.kind,
-                                createdAt = outcome.backup.createdAt,
-                                count = plan.changes.size,
-                                changedSince = plan.changedSince,
-                                notFound = plan.notFound,
-                            ),
-                        )
-                    }
+        if (isBusy()) return
+        // Started lazily so restoreJob is assigned before the body can reach its finally block.
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            status.update { it.copy(preparingRestore = true) }
+            try {
+                planRestore(uri)
+            } finally {
+                if (restoreJob === currentCoroutineContext().job) {
+                    status.update { it.copy(preparingRestore = false) }
+                }
+            }
+        }
+        restoreJob = job
+        job.start()
+    }
+
+    private suspend fun planRestore(uri: String) {
+        val country = settings.config.first().countryIso
+        when (val outcome = backups.prepareRestore(uri, country)) {
+            is BackupManager.RestoreOutcome.Invalid -> eventChannel.trySend(UiEvent.BackupUnreadable(outcome.error))
+            BackupManager.RestoreOutcome.ContactsFailed -> eventChannel.trySend(UiEvent.LoadFailed)
+            BackupManager.RestoreOutcome.PermissionDenied -> onPermissionLost()
+            is BackupManager.RestoreOutcome.Ready -> {
+                val plan = outcome.plan
+                if (plan.changes.isEmpty()) {
+                    eventChannel.trySend(
+                        UiEvent.NothingToRestore(plan.alreadyRestored, plan.changedSince, plan.notFound),
+                    )
+                    return
+                }
+                pendingRestore = plan
+                status.update {
+                    it.copy(
+                        restore = RestoreConfirmation(
+                            kind = outcome.backup.kind,
+                            createdAt = outcome.backup.createdAt,
+                            count = plan.changes.size,
+                            changedSince = plan.changedSince,
+                            notFound = plan.notFound,
+                        ),
+                    )
                 }
             }
         }
@@ -721,7 +764,9 @@ class MainViewModel(
 
     /**
      * Starts the call once allowed. Refused, the app's chat with the contact opens instead, where
-     * the user can still call; an app without one is explained in a Snackbar.
+     * the user can still call; an app without one is explained in a Snackbar. Refused for good,
+     * Android no longer asks, so every later pick would open the chat without a word: once the
+     * user is back from it, a Snackbar says why and offers the settings.
      */
     private fun onCallPermissionResult(granted: Boolean, canAskAgain: Boolean) {
         val option = (status.value.call as? CallRequest.RequestPermission)?.option ?: return
@@ -730,10 +775,28 @@ class MainViewModel(
             option.chat != null -> CallRequest.OpenChat(option.chat)
             else -> null
         }
+        chatNotice = if (next is CallRequest.OpenChat && !canAskAgain) option.label else null
         status.update { it.copy(call = next) }
         if (next == null) {
             eventChannel.trySend(UiEvent.CallPermissionDenied(option.label, permanently = !canAskAgain))
         }
+    }
+
+    /** The call or chat was started, or the choice closed. */
+    private fun onCallDismissed() {
+        if (status.value.call is CallRequest.OpenChat) chatNoticeOnReturn = chatNotice
+        chatNotice = null
+        status.update { it.copy(call = null) }
+    }
+
+    /**
+     * On resume: back from a chat opened instead of a call (a Snackbar shown before it opened
+     * would time out unseen behind it).
+     */
+    private fun showChatNotice() {
+        val app = chatNoticeOnReturn ?: return
+        chatNoticeOnReturn = null
+        eventChannel.trySend(UiEvent.CallOpenedChat(app))
     }
 
     // endregion
@@ -773,6 +836,8 @@ class MainViewModel(
         callJob?.cancel()
         restoreJob?.cancel()
         pendingRestore = null
+        chatNotice = null
+        chatNoticeOnReturn = null
         loaded.value = null
         selection.value = emptySet()
         status.update {

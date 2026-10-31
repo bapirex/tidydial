@@ -5,6 +5,7 @@ import android.accounts.AccountManager
 import android.content.ContentProviderOperation
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -510,12 +511,24 @@ class AndroidContactsRepository(
             .sortedWith(compareBy<CallOption.App, String>(collator) { it.label }.thenBy { it.isVideo })
     }
 
-    /** The only activity that opens [row], in [packageName] when known. */
+    /**
+     * The activity that opens [row]. Apps that open any type (a text editor with a wildcard type)
+     * match too, so only activities that name the row's exact mimetype count. The search is limited
+     * to [packageName] when the owning app is known; otherwise a package named like the row's
+     * account type wins over other apps naming the same type.
+     */
     private fun PackageManager.handler(row: ContactDataRow, packageName: String?): ActivityInfo? {
         val intent = appCallIntent(row.dataId, row.mimeType)
         packageName?.let(intent::setPackage)
-        return defaultActivities(intent).singleOrNull()?.activityInfo
+        val candidates = defaultActivities(intent, PackageManager.GET_RESOLVED_FILTER)
+            .filter { it.filter?.namesType(row.mimeType) != false }
+            .mapNotNull { it.activityInfo }
+        return candidates.singleOrNull { it.packageName == row.accountType } ?: candidates.singleOrNull()
     }
+
+    /** The filter lists [mimeType] itself, not a wildcard type that also covers it. */
+    private fun IntentFilter.namesType(mimeType: String): Boolean =
+        (0 until countDataTypes()).any { getDataType(it) == mimeType }
 
     /** Exported, and guarded by no permission TidyDial lacks but CALL_PHONE, asked for on use. */
     private fun canStart(activity: ActivityInfo): Boolean {
@@ -534,14 +547,15 @@ class AndroidContactsRepository(
     private fun PackageManager.canDial(phone: CallOption.Phone): Boolean =
         defaultActivities(phone.toIntent()).isNotEmpty()
 
-    private fun PackageManager.defaultActivities(intent: Intent): List<ResolveInfo> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val flags = PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
-            queryIntentActivities(intent, flags)
+    private fun PackageManager.defaultActivities(intent: Intent, extraFlags: Int = 0): List<ResolveInfo> {
+        val flags = PackageManager.MATCH_DEFAULT_ONLY or extraFlags
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(flags.toLong()))
         } else {
             @Suppress("DEPRECATION")
-            queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            queryIntentActivities(intent, flags)
         }
+    }
 
     // endregion
 

@@ -31,7 +31,7 @@
 <ul>
 <li>Read contacts: to list your phone numbers and show how they would be formatted.</li>
 <li>Write contacts: to save the numbers you choose to update, and to restore them when you undo or restore a backup.</li>
-<li>Make phone calls: only requested when you choose to call through another app such as WhatsApp. Regular calls open your phone app.</li>
+<li>Make phone calls (optional): lets calls through another app such as WhatsApp start from TidyDial. Asked for during setup, and again only if you choose such a call without having granted it. Regular calls open your phone app, and TidyDial never places a call by itself.</li>
 </ul>
 <p>These are the only permissions TidyDial asks you for.</p>
 

@@ -34,8 +34,9 @@ private val Context.backupDataStore: DataStore<Preferences> by preferencesDataSt
  * @property folderUri the tree URI of the backup folder.
  * @property folderName the folder's name as shown, so the UI never has to ask its provider.
  * @property snapshotFolderUri the folder the snapshot was last written to on this install. A
- *   folder that differs (the first backup, or a new folder) gets a snapshot of its own, so the
- *   current folder always holds one.
+ *   folder that differs (the first backup, a new folder, or the same one picked again) gets a
+ *   snapshot of its own, so the current folder always holds one. Cleared on every folder pick,
+ *   since a folder deleted and made again at the same path keeps its URI but not its files.
  */
 data class BackupPrefs(
     val asked: Boolean = false,
@@ -92,12 +93,17 @@ class SettingsRepository(
         }
         .distinctUntilChanged()
 
-    /** Remembers the backup folder and turns backups on. Throws [IOException] on failure. */
+    /**
+     * Remembers the backup folder and turns backups on. The next backup writes a snapshot, even
+     * to the folder picked before: it may have been emptied, or deleted and made again under the
+     * same name (which gives it the same URI). Throws [IOException] on failure.
+     */
     suspend fun setBackupFolder(uri: String, name: String) {
         backupDataStore.edit { prefs ->
             prefs[KEY_BACKUP_FOLDER_URI] = uri
             prefs[KEY_BACKUP_FOLDER_NAME] = name
             prefs[KEY_BACKUP_ENABLED] = true
+            prefs.remove(KEY_BACKUP_SNAPSHOT_FOLDER_URI)
         }
     }
 
@@ -109,6 +115,11 @@ class SettingsRepository(
     /** Remembers that [folderUri] holds a snapshot. Throws [IOException] on failure. */
     suspend fun markSnapshotWritten(folderUri: String) {
         backupDataStore.edit { it[KEY_BACKUP_SNAPSHOT_FOLDER_URI] = folderUri }
+    }
+
+    /** The snapshot's folder is gone: the next backup writes a new one. Throws [IOException] on failure. */
+    suspend fun forgetSnapshot() {
+        backupDataStore.edit { it.remove(KEY_BACKUP_SNAPSHOT_FOLDER_URI) }
     }
 
     private fun Preferences.toConfig(): FormatConfig {

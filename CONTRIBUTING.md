@@ -14,8 +14,9 @@ a security problem, please do not open a public issue: see [SECURITY.md](SECURIT
 - **Keep it small.** New dependencies need a good reason and an Apache-2.0-compatible license.
   Add them to `gradle/libs.versions.toml` and credit them in `NOTICE`, in the "Open-source
   libraries" section of the About sheet and in the README.
-- **No new permissions.** The app asks for `READ_CONTACTS` and `WRITE_CONTACTS`, and for
-  `CALL_PHONE` only when the user calls through another app that requires it. Please open an issue
+- **No new permissions.** The app asks for `READ_CONTACTS` and `WRITE_CONTACTS`, and for the
+  optional `CALL_PHONE` during setup and again only when the user calls through another app that
+  requires it without having granted it. Please open an issue
   to discuss anything that would change that before you write code.
 
 ## Development
