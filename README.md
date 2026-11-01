@@ -53,8 +53,8 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 - **Backups that outlive the app.** On the first update TidyDial offers to keep backups in a
   folder you pick (Documents, a folder inside Downloads, or a cloud storage app's folder if it
   offers one) through Android's file picker, which needs no permission. Before each update it
-  saves a readable JSON file with the old and new numbers, and the first backup in a folder comes
-  with a snapshot of every number as it was when the snapshot was taken. An update does not start
+  saves a readable JSON file with the old and new numbers, and the first backup after you choose a
+  folder comes with a snapshot of every number as it was when the snapshot was taken. An update does not start
   if its backup cannot be written, unless you choose to run it without one. *Restore from a
   backup…* in Format options works even after reinstalling, with the same safety rules: only
   numbers that still look as the update left them are restored (for a snapshot, only the
@@ -72,8 +72,14 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
   number filled in, which needs no permission. When apps such as WhatsApp, Signal or Threema
   added a voice or video call for that number to the contact, a sheet asks which way to call; a
   single way starts right away. Most messaging apps only accept calls from apps that may make
-  phone calls, so TidyDial asks for that permission when you call through one. If you decline,
-  it opens your chat with the contact in that app instead, when it has one.
+  phone calls, so the setup screen asks for that permission too, marked optional, and TidyDial
+  asks again only when you call through such an app without having granted it (or when you allow
+  it in Format options). If you decline, it opens your chat with the contact in that app instead,
+  when it has one.
+- **Permissions at a glance.** Format options show whether contacts access and the call
+  permission are allowed, and ask again, or open Android settings once Android no longer asks,
+  if one was declined or turned off. Where Android removes the permissions of apps left unused
+  for months, they also link to the setting that turns this off for TidyDial.
 - **Only valid numbers are rewritten.** Numbers libphonenumber cannot recognize are flagged as
   invalid and left as they are.
 - **Material You and Material 3 Expressive.** Built with Jetpack Compose and Material 3
@@ -90,7 +96,7 @@ on the device with Google's [libphonenumber](https://github.com/google/libphonen
 | **Stored by the app** | Your format settings, your backup choice and a journal of the last update (for undo). |
 | **Android backup** | The undo journal holds phone numbers, so it is excluded from cloud backup (and from all backups on Android 11 and lower). The backup choice is excluded from cloud backup and device transfer. |
 | **Backup files** | Optional. Stored only in the folder you pick, never in TidyDial's Android backup, and TidyDial never sends them anywhere. If you pick a cloud storage app's folder, that app syncs the files. They hold names and numbers, and stay after uninstalling. |
-| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`). Make phone calls (`CALL_PHONE`) is only requested when you choose to call through another app such as WhatsApp; regular calls open your phone app. |
+| **Permissions** | Contacts (`READ_CONTACTS`, `WRITE_CONTACTS`), required. Make phone calls (`CALL_PHONE`), optional: asked for during setup, and again only if you choose to call through another app such as WhatsApp without having granted it, or allow it in Format options; regular calls open your phone app. |
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 
@@ -143,7 +149,7 @@ app/src/main/java/net/evopoint/tidydial/
 ├── model/                    Plain data classes (PhoneEntry, ContactGroup, FormatConfig, ...)
 └── ui/
     ├── MainActivity.kt, MainViewModel.kt, TidyDialApp.kt, UiState.kt
-    ├── permission/           Contacts permission explainer
+    ├── permission/           Permission explainer: contacts, and the optional call permission
     ├── backup/               Backup prompt, backup failure and restore confirmation
     ├── contacts/             Contact list, filters, toolbar, confirm, progress and call sheets
     ├── options/              Format options and country picker sheets

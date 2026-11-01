@@ -67,6 +67,7 @@ class StackedSheetsTest {
                     onRestoreBackup = {},
                     onApply = {},
                     onDismiss = {},
+                    unusedAppRestrictions = { null },
                 )
             }
         }

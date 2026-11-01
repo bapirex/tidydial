@@ -28,6 +28,8 @@ class BackupManager(
     /** Read on every backup: file names and `createdAt` follow the device's current time zone. */
     private val clock: () -> Clock = Clock::systemDefaultZone,
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** The largest file written or read, so every backup TidyDial writes can be restored. */
+    private val maxFileBytes: Int = MAX_FILE_BYTES,
 ) {
     sealed interface WriteOutcome {
         /** Backups are turned off; nothing was written. */
@@ -60,8 +62,9 @@ class BackupManager(
      *
      * The snapshot holds every phone row of every account, skipped accounts included: any account
      * can be included later, so this covers every number TidyDial could ever change. It is
-     * written again for a new folder, so a folder that was deleted or replaced does not take the
-     * only snapshot with it. A snapshot written after earlier updates already holds their changes.
+     * written again for each folder pick (the same folder too) and after the folder went missing,
+     * so a folder that was deleted or replaced does not take the only snapshot with it. A snapshot
+     * written after earlier updates already holds their changes.
      */
     suspend fun backUpBeforeUpdate(entries: List<PhoneEntry>, countryIso: String): WriteOutcome =
         backUp(countryIso, withSnapshot = true) { byId ->
@@ -117,7 +120,7 @@ class BackupManager(
                 entries = rows.map { SnapshotEntry(it.identity(), it.number) },
             )
             when (val result = write(folder, BackupNames.snapshot(now.toLocalDateTime()), snapshot)) {
-                is BackupWriteResult.Failed -> return WriteOutcome.Failed(result.failure)
+                is BackupWriteResult.Failed -> return failed(result.failure)
                 is BackupWriteResult.Written -> names += result.displayName
             }
             try {
@@ -135,9 +138,25 @@ class BackupManager(
             entries = changesOf(rows.associateBy { it.dataId }),
         )
         return when (val result = write(folder, BackupNames.changes(now.toLocalDateTime()), changes)) {
-            is BackupWriteResult.Failed -> WriteOutcome.Failed(result.failure)
+            is BackupWriteResult.Failed -> failed(result.failure)
             is BackupWriteResult.Written -> WriteOutcome.Written(names + result.displayName)
         }
+    }
+
+    /**
+     * A folder that went missing took its snapshot with it. Made again under the same name it
+     * keeps its URI (and may keep its grant), so the snapshot is forgotten here, not only when the
+     * user picks a folder.
+     */
+    private suspend fun failed(failure: BackupFailure): WriteOutcome {
+        if (failure == BackupFailure.FOLDER_MISSING) {
+            try {
+                settings.forgetSnapshot()
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not forget the snapshot", e)
+            }
+        }
+        return WriteOutcome.Failed(failure)
     }
 
     /**
@@ -146,7 +165,7 @@ class BackupManager(
      */
     suspend fun prepareRestore(documentUri: String, countryIso: String): RestoreOutcome {
         val text = try {
-            store.read(documentUri, MAX_FILE_BYTES)
+            store.read(documentUri, maxFileBytes)
         } catch (e: IOException) {
             Log.w(TAG, "Could not read the backup", e)
             return RestoreOutcome.Invalid(BackupReadError.UNREADABLE)
@@ -166,8 +185,13 @@ class BackupManager(
         return RestoreOutcome.Ready(backup, plan)
     }
 
+    /** A file too large for [prepareRestore] to read back is not written: it could never be restored. */
     private suspend fun write(folder: String, name: String, file: BackupFile): BackupWriteResult {
         val bytes = withContext(defaultDispatcher) { BackupCodec.encode(file).toByteArray(Charsets.UTF_8) }
+        if (bytes.size > maxFileBytes) {
+            Log.w(TAG, "$name would take ${bytes.size} bytes, more than $maxFileBytes")
+            return BackupWriteResult.Failed(BackupFailure.TOO_LARGE)
+        }
         return store.write(folder, name, bytes)
     }
 
@@ -185,9 +209,12 @@ class BackupManager(
         private const val TAG = "BackupManager"
 
         /**
-         * About 300 bytes per number, so this still fits more than 25,000 numbers, while the
-         * text and its JSON tree stay small enough for any heap.
+         * The largest backup written or read. A snapshot takes about 320 bytes per phone row
+         * (pretty-printed, Latin names), so this fits about 50,000 rows, fewer with names in
+         * scripts that take more bytes: about twice Google's limit of 25,000 contacts per account,
+         * while the text and its JSON tree (about five times the file) stay within a phone's heap.
+         * Larger files are not written, as they could not be restored.
          */
-        const val MAX_FILE_BYTES = 8 * 1024 * 1024
+        const val MAX_FILE_BYTES = 16 * 1024 * 1024
     }
 }

@@ -150,5 +150,12 @@ fun UiEvent.toSnackbarSpec(resources: Resources): SnackbarSpec {
                 SnackbarSpec(message = message)
             }
         }
+
+        is UiEvent.CallOpenedChat -> SnackbarSpec(
+            message = resources.getString(R.string.list_snackbar_call_opened_chat, app),
+            actionLabel = resources.getString(R.string.list_snackbar_settings),
+            action = UiAction.OpenAppSettings,
+            duration = SnackbarDuration.Long,
+        )
     }
 }

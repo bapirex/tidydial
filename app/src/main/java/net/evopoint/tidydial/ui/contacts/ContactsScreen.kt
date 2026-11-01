@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
@@ -76,9 +77,15 @@ import net.evopoint.tidydial.ui.about.AboutSheet
 import net.evopoint.tidydial.ui.backup.BackupFailedDialog
 import net.evopoint.tidydial.ui.backup.BackupPromptSheet
 import net.evopoint.tidydial.ui.backup.RestoreConfirmDialog
+import net.evopoint.tidydial.ui.backup.RestorePreparingDialog
 import net.evopoint.tidydial.ui.options.FormatOptionsSheet
+import net.evopoint.tidydial.ui.permission.expectsRationale
+import net.evopoint.tidydial.ui.permission.isPermanentRefusal
+import net.evopoint.tidydial.ui.permission.rememberPermissionRefusals
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Room under the list for the floating toolbar and its margins. */
 private val ToolbarClearance = FloatingToolbarDefaults.ContainerSize + 32.dp
@@ -88,6 +95,9 @@ private val ListEndPadding = 16.dp
 
 /** Windows shorter than this let the search field and chips scroll away. */
 private val CompactHeaderHeight = 600.dp
+
+/** How long reading a backup for a restore may take before it is shown. */
+private val PreparingRestoreDelay = 400.milliseconds
 
 /**
  * Main screen: collapsing app bar with search and filters, the grouped contact list with
@@ -225,6 +235,7 @@ fun ContactsScreen(
 
         is BackupDialog.WriteFailed -> BackupFailedDialog(
             folderName = dialog.folderName,
+            tooLarge = dialog.tooLarge,
             error = state.backup.error,
             onChooseFolder = pickers.chooseFolder,
             onUpdateWithoutBackup = { onAction(UiAction.UpdateWithoutBackup) },
@@ -240,9 +251,29 @@ fun ContactsScreen(
             onDismiss = { onAction(UiAction.DismissRestore) },
         )
     }
+    if (rememberDelayedFlag(state.preparingRestore, PreparingRestoreDelay)) {
+        RestorePreparingDialog(onCancel = { onAction(UiAction.DismissRestore) })
+    }
     state.call?.let { CallRequestHandler(it, onAction) }
     // Last, so it stays on top of any sheet that is still closing.
     state.progress?.let { UpdateProgressSheet(it) }
+}
+
+/**
+ * [flag], but only once it stayed true for [after]: a quick read of a small backup should not
+ * flash a dialog.
+ */
+@Composable
+private fun rememberDelayedFlag(flag: Boolean, after: Duration): Boolean {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(flag) {
+        shown = false
+        if (flag) {
+            delay(after)
+            shown = true
+        }
+    }
+    return flag && shown
 }
 
 /** Opens the system pickers for the backup folder and for a backup file to restore. */
@@ -306,19 +337,29 @@ private fun CallRequestHandler(request: CallRequest, onAction: (UiAction) -> Uni
 }
 
 /**
- * Asks for CALL_PHONE, unless it is granted already, and reports the answer. Asks once per
- * request: not again when the activity is recreated while the system dialog is up. The pending
- * call lives only in the ViewModel, so if the process dies meanwhile the answer is dropped and
- * the user taps call again (like the rest of the app, nothing survives process death).
+ * Asks for CALL_PHONE, unless it is granted already, and reports the answer. The setup screen
+ * asks for it too, so this only shows when it was declined there, or for users who granted
+ * contacts access before setup asked for it. Asks once per request: not again when the activity
+ * is recreated while the system dialog is up. The pending call lives only in the ViewModel, so if
+ * the process dies meanwhile the answer is dropped and the user taps call again (like the rest of
+ * the app, nothing survives process death). A dialog closed without an answer is not taken for a
+ * permanent refusal; see [isPermanentRefusal].
  */
 @Composable
 private fun CallPermissionRequest(request: CallRequest.RequestPermission, onAction: (UiAction) -> Unit) {
     val context = LocalContext.current
     val activity = LocalActivity.current
     val currentOnAction by rememberUpdatedState(onAction)
+    val refusals = rememberPermissionRefusals()
+    // Saved with the request, as the answer can arrive in a recreated activity.
+    var rationaleBefore by rememberSaveable(request) { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        // After a denial, the system only shows the dialog again while a rationale is expected.
-        val canAskAgain = activity?.shouldShowRequestPermissionRationale(Manifest.permission.CALL_PHONE) ?: true
+        val canAskAgain = if (granted) {
+            refusals.forget(Manifest.permission.CALL_PHONE)
+            true
+        } else {
+            !refusals.onRefused(activity, Manifest.permission.CALL_PHONE, rationaleBefore)
+        }
         currentOnAction(UiAction.CallPermissionResult(granted = granted, canAskAgain = canAskAgain))
     }
     var asked by rememberSaveable(request) { mutableStateOf(false) }
@@ -329,6 +370,7 @@ private fun CallPermissionRequest(request: CallRequest.RequestPermission, onActi
         if (granted) {
             currentOnAction(UiAction.CallPermissionResult(granted = true, canAskAgain = true))
         } else {
+            rationaleBefore = activity.expectsRationale(Manifest.permission.CALL_PHONE)
             launcher.launch(Manifest.permission.CALL_PHONE)
         }
     }

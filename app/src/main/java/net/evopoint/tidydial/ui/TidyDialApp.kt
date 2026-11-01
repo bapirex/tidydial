@@ -1,15 +1,5 @@
 package net.evopoint.tidydial.ui
 
-import android.Manifest
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.Settings
-import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,33 +18,23 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.evopoint.tidydial.ui.contacts.ContactsScreen
 import net.evopoint.tidydial.ui.permission.PermissionScreen
-
-private val CONTACT_PERMISSIONS = arrayOf(
-    Manifest.permission.READ_CONTACTS,
-    Manifest.permission.WRITE_CONTACTS,
-)
+import net.evopoint.tidydial.ui.permission.hasContactsPermission
+import net.evopoint.tidydial.ui.permission.openAppSettings
+import net.evopoint.tidydial.ui.permission.rememberPermissionRequest
 
 private enum class Route { Blank, Permission, Contacts }
 
 /**
- * Root composable: owns the contacts permission flow and switches between the permission
- * explainer and the contacts list. The call permission is asked for by the contacts screen, only
- * when a call needs it.
+ * Root composable: owns the permission flow and switches between the permission explainer and
+ * the contacts list. The explainer asks for contacts access and the optional call permission
+ * together; the contacts screen asks for the call permission again only when a call needs it and
+ * it was not granted.
  */
 @Composable
 fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = LocalActivity.current
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { result ->
-        val granted = CONTACT_PERMISSIONS.all { result[it] == true || context.hasPermission(it) }
-        viewModel.onAction(
-            UiAction.PermissionResult(granted = granted, canAskAgain = activity.canAskAgain()),
-        )
-    }
+    val requestPermissions = rememberPermissionRequest(onResult = viewModel::onAction)
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.onAction(UiAction.PermissionRechecked(context.hasContactsPermission()))
@@ -80,7 +60,7 @@ fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 Route.Blank -> Box(Modifier.fillMaxSize())
                 Route.Permission -> PermissionScreen(
                     status = state.permission,
-                    onRequest = { permissionLauncher.launch(CONTACT_PERMISSIONS) },
+                    onRequest = requestPermissions,
                     onOpenSettings = { context.openAppSettings() },
                 )
 
@@ -99,21 +79,4 @@ fun TidyDialApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
     }
-}
-
-private fun Context.hasPermission(permission: String): Boolean =
-    checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-
-private fun Context.hasContactsPermission(): Boolean = CONTACT_PERMISSIONS.all { hasPermission(it) }
-
-/** After a denial, the system only shows the dialog again while a rationale is expected. */
-private fun Activity?.canAskAgain(): Boolean =
-    this == null || CONTACT_PERMISSIONS.any { shouldShowRequestPermissionRationale(it) }
-
-private fun Context.openAppSettings() {
-    val intent = Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.fromParts("package", packageName, null),
-    )
-    startActivity(intent)
 }

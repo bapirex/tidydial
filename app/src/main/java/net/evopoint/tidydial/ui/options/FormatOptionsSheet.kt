@@ -61,6 +61,11 @@ import net.evopoint.tidydial.model.FormatConfig
 import net.evopoint.tidydial.model.NumberFormatStyle
 import net.evopoint.tidydial.ui.BackupUi
 import net.evopoint.tidydial.ui.backup.BackupErrorText
+import net.evopoint.tidydial.ui.permission.PermissionAction
+import net.evopoint.tidydial.ui.permission.PermissionsUi
+import net.evopoint.tidydial.ui.permission.UnusedAppRestrictionsSource
+import net.evopoint.tidydial.ui.permission.rememberPermissionSettings
+import net.evopoint.tidydial.ui.permission.rememberSystemUnusedAppRestrictions
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.PhoneNumberTextStyles
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
@@ -76,7 +81,9 @@ import net.evopoint.tidydial.ui.theme.TidyDialTheme
  * The Backups section is not part of the draft: its changes go through the system picker and
  * take effect right away, which its description says, so Cancel never seems to undo them.
  * [onRestoreBackup] is expected to close the sheet, which discards unsaved format edits like
- * Cancel does.
+ * Cancel does. The Permissions section ([rememberPermissionSettings], with
+ * [unusedAppRestrictions] telling whether Android may remove permissions of unused apps) also
+ * applies right away.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,11 +99,14 @@ fun FormatOptionsSheet(
     onRestoreBackup: () -> Unit,
     onApply: (FormatConfig) -> Unit,
     onDismiss: () -> Unit,
+    unusedAppRestrictions: UnusedAppRestrictionsSource = rememberSystemUnusedAppRestrictions(),
 ) {
     val sheetState = rememberExpandedSheetState()
     val scope = rememberCoroutineScope()
     var draft by rememberSaveable(stateSaver = FormatConfigSaver) { mutableStateOf(config) }
     var pickingCountry by rememberSaveable { mutableStateOf(false) }
+    // Outside the sheet's window, so an answer still arrives after the activity was recreated.
+    val permissions = rememberPermissionSettings(unusedAppRestrictions)
 
     fun close() {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
@@ -114,6 +124,8 @@ fun FormatOptionsSheet(
             onBackupEnabledChange = onBackupEnabledChange,
             onChooseBackupFolder = onChooseBackupFolder,
             onRestoreBackup = onRestoreBackup,
+            permissions = permissions.ui,
+            onPermissionAction = permissions.onAction,
             onPickCountry = { pickingCountry = true },
             onApply = {
                 if (draft != config) onApply(draft)
@@ -153,6 +165,8 @@ internal fun FormatOptionsContent(
     onBackupEnabledChange: (Boolean) -> Unit,
     onChooseBackupFolder: () -> Unit,
     onRestoreBackup: () -> Unit,
+    permissions: PermissionsUi,
+    onPermissionAction: (PermissionAction) -> Unit,
     onPickCountry: () -> Unit,
     onApply: () -> Unit,
     onCancel: () -> Unit,
@@ -206,6 +220,7 @@ internal fun FormatOptionsContent(
                 onChooseFolder = onChooseBackupFolder,
                 onRestore = onRestoreBackup,
             )
+            PermissionsSection(permissions = permissions, onAction = onPermissionAction)
         }
         if (scrollState.canScrollForward) HorizontalDivider()
         OptionsFooter(onApply = onApply, onCancel = onCancel)
@@ -614,6 +629,8 @@ private fun FormatOptionsContentPreview() {
             onBackupEnabledChange = {},
             onChooseBackupFolder = {},
             onRestoreBackup = {},
+            permissions = SampleData.permissionsUi,
+            onPermissionAction = {},
             onPickCountry = {},
             onApply = {},
             onCancel = {},

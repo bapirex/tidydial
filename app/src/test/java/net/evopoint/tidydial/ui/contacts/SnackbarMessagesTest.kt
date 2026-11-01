@@ -169,4 +169,16 @@ class SnackbarMessagesTest {
         assertEquals(UiAction.OpenAppSettings, spec.action)
         assertEquals(SnackbarDuration.Long, spec.duration)
     }
+
+    @Test
+    fun aChatOpenedInsteadOfTheCallSaysWhyAndOffersSettings() {
+        val spec = UiEvent.CallOpenedChat("Signal").toSnackbarSpec(resources)
+        assertEquals(
+            "Opened the chat in Signal instead. To call from TidyDial, allow phone calls in settings.",
+            spec.message,
+        )
+        assertEquals("Settings", spec.actionLabel)
+        assertEquals(UiAction.OpenAppSettings, spec.action)
+        assertEquals(SnackbarDuration.Long, spec.duration)
+    }
 }

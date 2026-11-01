@@ -34,25 +34,25 @@ class FormatOptionsScreenshotTest {
     fun store() = capture("store_format_options")
 
     @Test
-    @Config(qualifiers = "w411dp-h2100dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2500dp-xxhdpi")
     fun formatOptionsFull() = capture("format_options_full")
 
     @Test
-    @Config(qualifiers = "w411dp-h2100dp-night-xxhdpi")
+    @Config(qualifiers = "w411dp-h2500dp-night-xxhdpi")
     fun formatOptionsFullDark() = capture("format_options_full_dark", darkTheme = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h2900dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h3500dp-xxhdpi")
     fun formatOptionsFullFontScale() = capture("format_options_full_font_1_5", fontScale = 1.5f)
 
     /** Backups were never set up: no folder row. */
     @Test
-    @Config(qualifiers = "w411dp-h2100dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2500dp-xxhdpi")
     fun formatOptionsBackupsNone() = capture("format_options_backups_none", backup = BackupUi())
 
     /** Access to the backup folder was removed. */
     @Test
-    @Config(qualifiers = "w411dp-h2100dp-night-xxhdpi")
+    @Config(qualifiers = "w411dp-h2500dp-night-xxhdpi")
     fun formatOptionsBackupsUnavailable() = capture(
         name = "format_options_backups_unavailable",
         darkTheme = true,
@@ -60,7 +60,7 @@ class FormatOptionsScreenshotTest {
     )
 
     @Test
-    @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2300dp-xxhdpi")
     fun formatOptionsForeignCountryNoAccounts() = capture(
         name = "format_options_foreign_no_accounts",
         config = FormatConfig(
@@ -103,6 +103,8 @@ class FormatOptionsScreenshotTest {
             onBackupEnabledChange = {},
             onChooseBackupFolder = {},
             onRestoreBackup = {},
+            permissions = SampleData.permissionsUi,
+            onPermissionAction = {},
             onPickCountry = {},
             onApply = {},
             onCancel = {},

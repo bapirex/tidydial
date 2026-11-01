@@ -49,6 +49,9 @@ class PermissionScreenScreenshotTest {
     @Config(qualifiers = "w411dp-h731dp-xxhdpi")
     fun store() {
         show()
+        // Scroll both permission items fully into view above the pinned actions.
+        val firstPromise = RuntimeEnvironment.getApplication().getString(R.string.permission_promise_offline)
+        composeRule.onNodeWithText(firstPromise).performScrollTo()
         capture("store_permission")
     }
 
@@ -70,9 +73,21 @@ class PermissionScreenScreenshotTest {
         RuntimeEnvironment.setFontScale(1.5f)
         show()
         capture("permission_font_1_5")
+        // With a font this large the actions scroll with the content instead of staying pinned.
         val footnote = RuntimeEnvironment.getApplication().getString(R.string.permission_footnote)
         composeRule.onNodeWithText(footnote).performScrollTo()
         capture("permission_font_1_5_bottom")
+    }
+
+    // A short portrait window, such as one half of a split screen: the actions scroll into view.
+    @Test
+    @Config(qualifiers = "w360dp-h400dp-xxhdpi")
+    fun shortWindowPermanentlyDenied() {
+        RuntimeEnvironment.setFontScale(1.5f)
+        show(PermissionStatus.PermanentlyDenied)
+        val footnote = RuntimeEnvironment.getApplication().getString(R.string.permission_footnote)
+        composeRule.onNodeWithText(footnote).performScrollTo()
+        capture("permission_short_window_bottom")
     }
 
     @Test

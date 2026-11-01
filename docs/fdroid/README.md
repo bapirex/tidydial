@@ -140,9 +140,10 @@ Why it fits F-Droid:
 * No anti-features: no ads, tracking, analytics, Google Play Services, Firebase
   or other proprietary libraries.
 * No network access: the manifest removes the INTERNET and ACCESS_NETWORK_STATE
-  permissions. The permissions are READ_CONTACTS and WRITE_CONTACTS, plus
-  CALL_PHONE, which is only requested when the user calls through another app
-  (such as WhatsApp) that requires it.
+  permissions. The permissions are READ_CONTACTS and WRITE_CONTACTS, plus the
+  optional CALL_PHONE, which other apps (such as WhatsApp) require to start a
+  call from TidyDial. It is asked for during setup and again only when the user
+  calls through such an app without having granted it.
 * No prebuilt binaries in the repository other than the Gradle wrapper JAR.
   Dependency metadata (`dependenciesInfo`) and VCS info are left out of the APK.
 * Reproducible build: the release APK on GitHub is signed with the developer key

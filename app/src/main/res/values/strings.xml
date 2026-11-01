@@ -36,15 +36,27 @@
     <!-- Spoken by screen readers for the example card. %1$s is the original number, %2$s the formatted one. -->
     <string name="permission_example_description">Example: %1$s becomes %2$s</string>
 
+    <!-- What each permission is for, one item per permission. -->
+    <string name="permission_contacts_title">Contacts</string>
+    <string name="permission_contacts_body">To read and tidy the phone numbers in your contacts. TidyDial never sends them anywhere.</string>
+    <string name="permission_call_title">Phone calls</string>
+    <!-- CALL_PHONE. Messaging apps only start a call for apps that hold it; TidyDial itself never uses it to dial. -->
+    <string name="permission_call_body">Lets calls through WhatsApp, Signal, Telegram or Google Meet start right from TidyDial, since those apps only accept calls from apps allowed to make them. Regular calls always open your phone app, and TidyDial never places a call by itself.</string>
+    <!-- Label next to a permission's name. -->
+    <string name="permission_required">Required</string>
+    <string name="permission_optional">Optional</string>
+
     <!-- Privacy promises. -->
     <string name="permission_promise_offline">Works completely offline — no internet permission</string>
     <string name="permission_promise_undo">Review every change, undo any time</string>
 
     <!-- Actions. -->
-    <string name="permission_allow">Allow contacts access</string>
+    <!-- Asks for contacts access and, unless granted already, the optional call permission. -->
+    <string name="permission_continue">Continue</string>
     <string name="permission_open_settings">Open settings</string>
-    <!-- Shown under the button while the system dialog can still be shown. -->
-    <string name="permission_denied_hint">Next, Android will ask for access. Choose Allow.</string>
+    <!-- Shown above the button while the system dialogs can still be shown: one for contacts and,
+         unless granted or refused already, one for phone calls. -->
+    <string name="permission_denied_hint">Next, Android asks for access. Allow contacts to continue.</string>
     <!-- Shown when the system dialog will not appear again. -->
     <string name="permission_permanently_denied">Contacts access was denied. Enable it in Settings &gt; Permissions.</string>
     <string name="permission_footnote">TidyDial only changes phone numbers.</string>
@@ -190,6 +202,8 @@
     <string name="list_snackbar_call_failed">No app could start this call</string>
     <!-- The call permission was refused, and the app has no chat to open instead. %1$s is an app name such as WhatsApp. -->
     <string name="list_snackbar_call_permission">Calling through %1$s needs permission to make phone calls</string>
+    <!-- The call permission was refused for good, so the app's chat opened instead of the call. Shown when the user comes back from the chat. %1$s is an app name such as WhatsApp. -->
+    <string name="list_snackbar_call_opened_chat">Opened the chat in %1$s instead. To call from TidyDial, allow phone calls in settings.</string>
     <!-- Snackbar action that opens TidyDial's page in system settings. -->
     <string name="list_snackbar_settings">Settings</string>
 
@@ -207,7 +221,7 @@
     <string name="backup_prompt_title">Keep a backup?</string>
     <string name="backup_prompt_body">Keep a copy of every change in a folder you choose, so you can restore your numbers even after uninstalling TidyDial.</string>
     <string name="backup_prompt_snapshot">The first backup also saves all your numbers as they are now.</string>
-    <string name="backup_prompt_privacy">Backups hold names and numbers. TidyDial never sends them anywhere, but if you pick a folder of a cloud storage app, that app syncs them like any other file.</string>
+    <string name="backup_prompt_privacy">Backups hold names, numbers and the accounts they’re saved in (for a Google account, its email address). TidyDial never sends them anywhere, but if you pick a folder of a cloud storage app, that app syncs them like any other file.</string>
     <string name="backup_prompt_choose">Choose backup folder</string>
     <string name="backup_prompt_skip">Continue without</string>
     <string name="backup_prompt_later">You can change this later in Format options.</string>
@@ -217,9 +231,14 @@
     <!-- %1$s is the name of the backup folder, e.g. "Documents". -->
     <string name="backup_failed_body">TidyDial couldn’t save the backup in “%1$s”, so nothing was changed. The folder may have been moved or deleted, or access to it was removed.</string>
     <string name="backup_failed_body_no_folder">TidyDial couldn’t save the backup, so nothing was changed. Choose a folder for backups.</string>
+    <!-- The backup file would hold so many numbers that TidyDial could not read it back to restore it, so it was not saved. -->
+    <string name="backup_failed_body_too_large">Your contacts hold too many numbers for a backup TidyDial could restore, so nothing was saved or changed. You can update without a backup, or turn off backups in Format options.</string>
     <string name="backup_failed_choose">Choose folder</string>
     <!-- Runs this one update without a backup; backups stay on for later updates. -->
     <string name="backup_failed_update_anyway">Update without backup</string>
+
+    <!-- Shown while the backup file picked for a restore is read and compared with the contacts. -->
+    <string name="restore_preparing">Reading backup…</string>
 
     <!-- Restore confirmation. %1$d is the number of numbers, %2$s the date and time of the backup, e.g. "Oct 31, 2026, 9:04 AM". -->
     <plurals name="restore_confirm_title">
@@ -309,6 +328,28 @@
     <string name="options_backups_folder_unavailable">Can’t write here anymore. Choose the folder again.</string>
     <string name="options_backups_restore">Restore from a backup…</string>
     <string name="options_backups_restore_summary">Bring back numbers from a backup file</string>
+
+    <string name="options_section_permissions">Permissions</string>
+    <string name="options_permissions_summary">Allow a permission you declined, or that Android turned off. Changes here are saved right away, without Apply.</string>
+    <string name="options_permission_allowed">Allowed</string>
+    <string name="options_permission_not_allowed">Not allowed</string>
+    <!-- Shows the system permission dialog again. -->
+    <string name="options_permission_allow">Allow</string>
+    <!-- Spoken by screen readers for the rows: "Double-tap to allow contacts access". -->
+    <string name="options_permissions_allow_contacts_action">Allow contacts access</string>
+    <string name="options_permissions_allow_calls_action">Allow phone calls</string>
+    <!-- The system no longer shows the dialog, so the row opens TidyDial's page in the system settings. -->
+    <string name="options_permissions_contacts_settings_action">Allow contacts access in settings</string>
+    <string name="options_permissions_calls_settings_action">Allow phone calls in settings</string>
+    <!-- Under "Not allowed" once the system refuses to show its dialog, for example right after tapping Allow. -->
+    <string name="options_permission_permanently_denied">Android won’t ask again. Allow it in settings.</string>
+    <!-- Android removes the permissions of apps that were not opened for a few months (Android 11 and later; on Android 8 to 10 through Google Play). -->
+    <string name="options_permissions_unused">Remove permissions if unused</string>
+    <string name="options_permissions_unused_on">Android may remove permissions if you don’t use TidyDial for a few months</string>
+    <string name="options_permissions_unused_off">Turned off</string>
+    <!-- Opens the system page where this is turned off ("Pause app activity if unused" on Android 12 and later). -->
+    <string name="options_permissions_unused_turn_off">Turn off</string>
+    <string name="options_permissions_unused_turn_off_action">Turn off in system settings</string>
 
     <!-- Country picker -->
     <string name="country_picker_title">Choose country</string>

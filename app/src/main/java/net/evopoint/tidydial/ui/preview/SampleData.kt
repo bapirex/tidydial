@@ -18,6 +18,9 @@ import net.evopoint.tidydial.ui.RestoreConfirmation
 import net.evopoint.tidydial.ui.UiState
 import net.evopoint.tidydial.ui.UpdateProgress
 import net.evopoint.tidydial.ui.isSelectable
+import net.evopoint.tidydial.ui.permission.AccessState
+import net.evopoint.tidydial.ui.permission.PermissionsUi
+import net.evopoint.tidydial.ui.permission.UnusedAppRestrictions
 import java.time.OffsetDateTime
 import java.util.Locale
 
@@ -128,6 +131,12 @@ object SampleData {
 
     /** Backups turned on, into a folder the user picked. */
     val backupUi = BackupUi(enabled = true, folderName = "TidyDial backups")
+
+    /** Contacts allowed, the call permission declined, and Android may remove both if unused. */
+    val permissionsUi = PermissionsUi(
+        calls = AccessState.Denied,
+        unusedAppRestrictions = UnusedAppRestrictions.On,
+    )
 
     /** A changes backup where two numbers were edited since and one contact is gone. */
     val restoreConfirmation = RestoreConfirmation(

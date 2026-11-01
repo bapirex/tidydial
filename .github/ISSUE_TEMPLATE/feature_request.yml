@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for the suggestion. TidyDial stays fully offline and asks for no permissions
-        besides contacts (and the call permission, only when calling through an app that needs
-        it), so ideas that need network access, accounts or tracking are out of scope.
+        besides contacts (and the optional call permission, asked during setup and again only
+        when calling through an app that needs it), so ideas that need network access, accounts or tracking are out of scope.
   - type: textarea
     id: problem
     attributes:

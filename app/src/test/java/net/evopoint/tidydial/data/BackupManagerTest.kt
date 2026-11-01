@@ -221,6 +221,102 @@ class BackupManagerTest {
     }
 
     @Test
+    fun pickingTheSameFolderAgainWritesANewSnapshot() = runTest(dispatcher) {
+        backupsOn()
+        manager.backUpBeforeUpdate(entries, "US")
+
+        // The folder was emptied, or deleted and made again under the same name (same tree URI),
+        // and the user picked it again.
+        store.folders.getValue(FOLDER).clear()
+        settings.setBackupFolder(FOLDER, "TidyDial backups")
+        val outcome = manager.backUpBeforeUpdate(entries, "US")
+
+        val names = listOf("TidyDial snapshot 2026-10-31 090412.json", "TidyDial backup 2026-10-31 090412.json")
+        assertEquals(BackupManager.WriteOutcome.Written(names), outcome)
+        assertEquals(FOLDER, settings.backup.first().snapshotFolderUri)
+    }
+
+    @Test
+    fun aMissingFolderTakesItsSnapshotWithIt() = runTest(dispatcher) {
+        backupsOn()
+        manager.backUpBeforeUpdate(entries, "US")
+
+        store.failWrite = BackupFailure.FOLDER_MISSING
+        manager.backUpBeforeUpdate(entries, "US")
+        assertNull(settings.backup.first().snapshotFolderUri)
+
+        // Made again under the same name, the folder keeps its URI and grant: no new pick needed.
+        store.failWrite = null
+        store.folders.getValue(FOLDER).clear()
+        val outcome = manager.backUpBeforeUpdate(entries, "US") as BackupManager.WriteOutcome.Written
+        assertEquals("TidyDial snapshot 2026-10-31 090412.json", outcome.names.first())
+    }
+
+    @Test
+    fun aBackupTooLargeToRestoreIsNotWritten() = runTest(dispatcher) {
+        val snapshotBytes = snapshotOfRows().length
+        val small = BackupManager(
+            store, settings, contacts, "1.2.0", PhoneNumberFormatter(), { clock }, dispatcher, snapshotBytes - 1,
+        )
+        backupsOn()
+
+        assertEquals(
+            BackupManager.WriteOutcome.Failed(BackupFailure.TOO_LARGE),
+            small.backUpBeforeUpdate(entries, "US"),
+        )
+        assertTrue(store.files(FOLDER).isEmpty())
+        assertNull(settings.backup.first().snapshotFolderUri)
+    }
+
+    @Test
+    fun aBackupAtTheLimitIsWrittenAndRestored() = runTest(dispatcher) {
+        // Writer and reader share the limit: whatever is written can be read back.
+        val limited = BackupManager(
+            store, settings, contacts, "1.2.0", PhoneNumberFormatter(), { clock }, dispatcher, snapshotOfRows().length,
+        )
+        backupsOn()
+
+        val outcome = limited.backUpBeforeUpdate(entries, "US") as BackupManager.WriteOutcome.Written
+
+        val snapshot = "$FOLDER/${outcome.names.first()}"
+        assertTrue(limited.prepareRestore(snapshot, "US") is BackupManager.RestoreOutcome.Ready)
+    }
+
+    @Test
+    fun aLargeBookFitsTheLimit() = runTest(dispatcher) {
+        // 45,000 phone rows with realistic fields (a merged contact's lookup key, an email-style
+        // account name): far more than most books, and still restorable.
+        contacts.rows = List(45_000) { i ->
+            PhoneRow(
+                dataId = 100_000L + i,
+                rawContactId = 50_000L + i,
+                lookupKey = "3789r$i-2B4D3F2B4B4D2B.3789r${i + 1}-2B4D3F2B4B",
+                accountType = "com.google",
+                accountName = "avery.sample@example.com",
+                sourceId = "5e1f0a9b8c7d6e5f",
+                displayName = "Sample Person $i",
+                number = "212555${(i % 10_000).toString().padStart(4, '0')}",
+            )
+        }
+        backupsOn()
+
+        val outcome = manager.backUpBeforeUpdate(emptyList(), "US") as BackupManager.WriteOutcome.Written
+
+        val restore = manager.prepareRestore("$FOLDER/${outcome.names.first()}", "US")
+        assertEquals(45_000, ((restore as BackupManager.RestoreOutcome.Ready).backup as BackupFile.Snapshot).size)
+    }
+
+    /** The snapshot [rows] encode to at 09:04:12, as [BackupManager] writes it. */
+    private fun snapshotOfRows(): String = BackupCodec.encode(
+        BackupFile.Snapshot(
+            createdAt = OffsetDateTime.parse("2026-10-31T09:04:12+01:00"),
+            appVersion = "1.2.0",
+            countryIso = "US",
+            entries = rows.map { SnapshotEntry(it.identity(), it.number) },
+        ),
+    )
+
+    @Test
     fun fileNamesFollowATimeZoneChange() = runTest(dispatcher) {
         backupsOn()
         manager.backUpBeforeUpdate(entries, "US")

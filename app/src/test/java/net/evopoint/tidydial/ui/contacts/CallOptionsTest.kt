@@ -27,10 +27,13 @@ import net.evopoint.tidydial.ui.CallRequest
 import net.evopoint.tidydial.ui.UiAction
 import net.evopoint.tidydial.ui.UiEvent
 import net.evopoint.tidydial.ui.UiState
+import net.evopoint.tidydial.ui.permission.PermissionRefusals
 import net.evopoint.tidydial.ui.preview.SampleData
 import net.evopoint.tidydial.ui.theme.TidyDialTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -186,7 +189,7 @@ class CallOptionsTest {
 
         answer(granted = true)
 
-        assertEquals(listOf(UiAction.CallPermissionResult(granted = true, canAskAgain = false)), actions)
+        assertEquals(listOf(UiAction.CallPermissionResult(granted = true, canAskAgain = true)), actions)
     }
 
     @Test
@@ -202,7 +205,7 @@ class CallOptionsTest {
 
         assertEquals(1, registry.requests.size)
         answer(granted = true)
-        assertEquals(listOf(UiAction.CallPermissionResult(granted = true, canAskAgain = false)), actions)
+        assertEquals(listOf(UiAction.CallPermissionResult(granted = true, canAskAgain = true)), actions)
     }
 
     @Test
@@ -217,13 +220,51 @@ class CallOptionsTest {
 
     @Test
     fun aPermanentRefusalIsReported() {
-        // No rationale expected after a denial: the system will not show the dialog again.
+        // Refused before, and no rationale expected now: the system did not show the dialog.
+        PermissionRefusals(app).markRefused(Manifest.permission.CALL_PHONE)
         setScreen(SampleData.uiState().copy(call = CallRequest.RequestPermission(guardedCall)))
 
         answer(granted = false)
 
         assertEquals(listOf(UiAction.CallPermissionResult(granted = false, canAskAgain = false)), actions)
     }
+
+    @Test
+    fun aSecondRefusalIsPermanent() {
+        // Refused once: a rationale is expected until the user refuses again.
+        rationale(true)
+        setScreen(SampleData.uiState().copy(call = CallRequest.RequestPermission(guardedCall)))
+
+        rationale(false)
+        answer(granted = false)
+
+        assertEquals(listOf(UiAction.CallPermissionResult(granted = false, canAskAgain = false)), actions)
+    }
+
+    @Test
+    fun aFirstDialogClosedWithoutAnAnswerIsNotPermanent() {
+        // Back or a tap outside on Android 11+: refused, but no rationale expected, as for a
+        // permanent refusal. Never refused here before, so the dialog can still be shown.
+        setScreen(SampleData.uiState().copy(call = CallRequest.RequestPermission(guardedCall)))
+
+        answer(granted = false)
+
+        assertEquals(listOf(UiAction.CallPermissionResult(granted = false, canAskAgain = true)), actions)
+        assertTrue(PermissionRefusals(app).wasRefused(Manifest.permission.CALL_PHONE))
+    }
+
+    @Test
+    fun aGrantForgetsEarlierRefusals() {
+        PermissionRefusals(app).markRefused(Manifest.permission.CALL_PHONE)
+        setScreen(SampleData.uiState().copy(call = CallRequest.RequestPermission(guardedCall)))
+
+        answer(granted = true)
+
+        assertFalse(PermissionRefusals(app).wasRefused(Manifest.permission.CALL_PHONE))
+    }
+
+    private fun rationale(expected: Boolean) =
+        shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(Manifest.permission.CALL_PHONE, expected)
 
     @Test
     fun aGrantedPermissionIsNotAskedForAgain() {

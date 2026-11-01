@@ -2,7 +2,7 @@ package net.evopoint.tidydial.ui.backup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -22,7 +22,9 @@ import net.evopoint.tidydial.ui.theme.TidyDialTheme
 /**
  * The backup could not be written to [folderName] (null: no folder), so the update did not
  * start. Offers to choose the folder again, which continues the update, or to run this one
- * update without a backup (backups stay on). [error]: choosing the folder failed.
+ * update without a backup (backups stay on). [error]: choosing the folder failed. [tooLarge]: the
+ * backup would be too large to restore, which no folder fixes, so only the update without a
+ * backup is offered.
  */
 @Composable
 fun BackupFailedDialog(
@@ -32,6 +34,7 @@ fun BackupFailedDialog(
     onUpdateWithoutBackup: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    tooLarge: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -44,24 +47,36 @@ fun BackupFailedDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    if (folderName != null) {
-                        stringResource(R.string.backup_failed_body, folderName)
-                    } else {
-                        stringResource(R.string.backup_failed_body_no_folder)
+                    when {
+                        tooLarge -> stringResource(R.string.backup_failed_body_too_large)
+                        folderName != null -> stringResource(R.string.backup_failed_body, folderName)
+                        else -> stringResource(R.string.backup_failed_body_no_folder)
                     },
                 )
                 if (error != null) BackupErrorText(error)
             }
         },
         confirmButton = {
-            TextButton(onClick = onChooseFolder) { Text(stringResource(R.string.backup_failed_choose)) }
-        },
-        dismissButton = {
-            Row {
+            if (tooLarge) {
                 TextButton(onClick = onUpdateWithoutBackup) {
                     Text(stringResource(R.string.backup_failed_update_anyway))
                 }
+            } else {
+                TextButton(onClick = onChooseFolder) { Text(stringResource(R.string.backup_failed_choose)) }
+            }
+        },
+        dismissButton = {
+            if (tooLarge) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            } else {
+                // A FlowRow, not a Row: with a large font "Cancel" moves under "Update without
+                // backup" instead of being squeezed to nothing beside it.
+                FlowRow {
+                    TextButton(onClick = onUpdateWithoutBackup) {
+                        Text(stringResource(R.string.backup_failed_update_anyway))
+                    }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+                }
             }
         },
     )
